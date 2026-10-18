@@ -1,0 +1,63 @@
+{
+  "api_base": {
+    "description": "FurryCons 开放接口地址",
+    "type": "string",
+    "default": "https://api.furrycons.cn/open"
+  },
+  "api_key": {
+    "description": "FurryCons API Key（Authorization 原值）",
+    "type": "string",
+    "default": "",
+    "hint": "从 FurryCons 工作台获取；不要填写 Bearer 前缀，除非上游明确要求。"
+  },
+  "timezone": {
+    "description": "显示及查询时区",
+    "type": "string",
+    "default": "Asia/Shanghai"
+  },
+  "browser_path": {
+    "description": "可选 Chromium 浏览器路径",
+    "type": "string",
+    "default": ""
+  },
+  "render_timeout": {
+    "description": "渲染超时秒数",
+    "type": "int",
+    "default": 60
+  },
+  "page_size": {
+    "description": "每页展会数量",
+    "type": "int",
+    "default": 8
+  },
+  "interaction_hours": {
+    "description": "查询交互有效期（小时）",
+    "type": "float",
+    "default": 24
+  },
+  "cache_minutes": {
+    "description": "新鲜查询缓存时限（分钟，0 禁用）",
+    "type": "float",
+    "default": 10
+  },
+  "stale_hours": {
+    "description": "数据源故障回退时限（小时，0 禁用）",
+    "type": "float",
+    "default": 24
+  },
+  "bare_numbers": {
+    "description": "允许裸数字选择当前用户最近查询",
+    "type": "bool",
+    "default": false
+  },
+  "bare_names": {
+    "description": "允许裸名称搜索（将匹配普通聊天文字）",
+    "type": "bool",
+    "default": false
+  },
+  "bare_ids": {
+    "description": "允许裸 UUID 展会 ID 查询",
+    "type": "bool",
+    "default": false
+  }
+}

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><style>
+@font-face {font-family:FurryCons;src:url('https://furrycons.invalid/font.otf')}
+* {box-sizing:border-box} body {margin:0;padding:48px;background:#f4f6fc;color:#1b2436;font-family:FurryCons,sans-serif;font-size:24px;line-height:1.7;overflow-wrap:anywhere}
+.brand {font-size:21px;letter-spacing:2px;color:#405f91} h1 {font-size:49px;line-height:1.35;margin:24px 0} .tag {display:inline-block;padding:8px 20px;border-radius:30px;background:#d7e4ff;color:#244777}
+.card {padding:28px 32px;margin-top:24px;border-radius:28px;background:white} .label {color:#576478;font-size:20px} .intro {white-space:pre-wrap} .source {font-size:19px;color:#405f91} footer {margin-top:30px;color:#576478;font-size:18px}
+</style></head><body>
+<div class="brand">FURRYCONS · 展会详情</div>
+<h1>{{ event.name }}</h1><span class="tag">{{ event.status_label }}</span>
+<div class="card"><div class="label">举办时间 · {{ event.timezone }}</div>{{ event.start_label }} — {{ event.end_label }}<div class="label">地区与地址</div>{{ event.region }} · {{ event.address }}</div>
+<div class="card"><div class="label">{{ event.introduction_type }}</div><div class="intro">{{ event.introduction }}</div></div>
+<div class="card source"><div class="label">数据来源 · FurryCons</div>{{ event.source }}</div>
+<footer>展会 ID：{{ event.id }}<br>缺失信息以数据源为准，请通过来源入口核对最新安排。</footer>
+</body></html>

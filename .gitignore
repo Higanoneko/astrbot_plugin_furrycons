@@ -1,0 +1,67 @@
+# Local specifications, references, tickets, and agent communication
+/.scratch/
+/[Dd]ev[Dd]ocs/
+/[Rr]eference/
+/docs/
+AGENTS.md
+CLAUDE.md
+/.agents/
+/.codex/
+/.claude/
+
+# Local acceptance probes and generated evidence (not plugin source)
+/artifacts/
+/scripts/verify_*.py
+/scripts/probe_*.py
+
+# Python environments, caches, and build output
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.tox/
+.nox/
+__pypackages__/
+*.egg-info/
+/build/
+/dist/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Framework runtime, downloaded development host, user data, and logs
+/.runtime/
+/data/
+*.sqlite*
+*.db
+*.db-*
+*.log
+logs/
+
+# Credentials and local environment values
+.env
+.env.*
+!.env.example
+APIKey.*
+apikey.*
+secrets.*
+.secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

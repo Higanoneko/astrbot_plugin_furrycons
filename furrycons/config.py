@@ -1,0 +1,54 @@
+from dataclasses import dataclass, field
+from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from .errors import UserError
+
+
+@dataclass(frozen=True)
+class Settings:
+    api_base: str = "https://api.furrycons.cn/open"
+    api_key: str = field(default="", repr=False)
+    timezone: str = "Asia/Shanghai"
+    browser_path: str = ""
+    render_timeout: int = 60
+    page_size: int = 8
+    interaction_hours: float = 24
+    cache_minutes: float = 10
+    stale_hours: float = 24
+    bare_numbers: bool = False
+    bare_names: bool = False
+    bare_ids: bool = False
+
+    @classmethod
+    def from_dict(cls, value: dict):
+        allowed = cls.__dataclass_fields__
+        settings = cls(**{k: v for k, v in value.items() if k in allowed})
+        url = urlsplit(settings.api_base)
+        if url.scheme != "https" or not url.netloc or url.username or url.query or url.fragment:
+            raise UserError("数据源必须是无账号、参数或片段的 HTTPS 地址。")
+        if not isinstance(settings.api_key, str) or any(c in settings.api_key for c in "\r\n"):
+            raise UserError("API Key 格式无效，请检查配置。")
+        try:
+            ZoneInfo(settings.timezone)
+        except (ZoneInfoNotFoundError, TypeError, ValueError):
+            raise UserError("时区无效，请使用 Asia/Shanghai 等 IANA 时区名称。") from None
+        if type(settings.render_timeout) is not int or not 5 <= settings.render_timeout <= 600:
+            raise UserError("渲染超时须为 5–600 秒整数。")
+        if not isinstance(settings.browser_path, str):
+            raise UserError("浏览器位置须为路径字符串。")
+        if type(settings.page_size) is not int or not 1 <= settings.page_size <= 100:
+            raise UserError("每页数量须为 1–100 的整数。")
+        if (
+            type(settings.interaction_hours) not in (int, float)
+            or not 0 < settings.interaction_hours <= 8760
+        ):
+            raise UserError("交互有效期须为大于 0、不超过 8760 的小时数。")
+        for name in ("cache_minutes", "stale_hours"):
+            value = getattr(settings, name)
+            if type(value) not in (int, float) or not 0 <= value <= 525600:
+                raise UserError("缓存与故障回退时限须为非负有限数值。")
+        for name in ("bare_numbers", "bare_names", "bare_ids"):
+            if type(getattr(settings, name)) is not bool:
+                raise UserError("裸数字、裸名称与裸 ID 开关须分别为布尔值。")
+        return settings

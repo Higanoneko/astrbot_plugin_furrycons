@@ -1,0 +1,6 @@
+name: astrbot_plugin_furrycons
+display_name: FurryCons 展会图片
+desc: 查询 FurryCons 展会并以浏览器渲染列表和详情图。
+version: v0.1.0
+author: higan
+repo: https://github.com/higanoneko/astrbot_plugin_furrycons
