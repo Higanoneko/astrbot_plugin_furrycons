@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import replace
 
@@ -44,7 +45,14 @@ async def test_enabled_summary_selects_source_text_and_preserves_unknown_fields_
 
 @pytest.mark.parametrize("disabled", ["switch", "provider", "adapter"])
 async def test_disabled_or_missing_model_uses_excerpt_without_calling_model(disabled):
-    app = summary_app(error=AssertionError("must not invoke"))
+    app = summary_app()
+    calls = []
+
+    async def model(*args):
+        calls.append(args)
+        return "[]"
+
+    app.model = model
     if disabled == "switch":
         app.settings = replace(app.settings, ai_summary=False)
     elif disabled == "provider":
@@ -56,6 +64,7 @@ async def test_disabled_or_missing_model_uses_excerpt_without_calling_model(disa
         view = app.renderer.views[-1]
         assert view["introduction_type"] == "原文节选"
         assert view["introduction"] == DESCRIPTION
+        assert not calls
     finally:
         await app.close()
 
@@ -92,5 +101,22 @@ async def test_model_error_does_not_expose_provider_error_or_break_detail():
         reply = await app.execute("详情 x")
         assert reply.image and "secret-provider-key" not in reply.text
         assert app.renderer.views[-1]["introduction_type"] == "原文节选"
+    finally:
+        await app.close()
+
+
+async def test_model_timeout_falls_back_to_readable_excerpt():
+    app = summary_app()
+    app.settings = replace(app.settings, summary_timeout=1)
+
+    async def stalled(*_):
+        await asyncio.Event().wait()
+
+    app.model = stalled
+    try:
+        reply = await app.execute("详情 x")
+        assert reply.image
+        view = app.renderer.views[-1]
+        assert view["introduction_type"] == "原文节选" and view["introduction"] == DESCRIPTION
     finally:
         await app.close()
