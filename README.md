@@ -1,6 +1,6 @@
 # FurryCons 展会图片插件
 
-面向 AstrBot 的 FurryCons 展会图片查询插件。已提供详情、默认/日期/省市查询、名称搜索、稳定分页、持久查询短码、缓存、全部结果单图、可配置裸交互、原文件入口、本地 ZIP 主题导入和可选 AI 总结。**开发中，尚未完成首版全部功能及真实平台验收。**主题商店计划在 P3 落地，Discord 计划在 P2 完成。
+面向 AstrBot 的 FurryCons 展会图片查询插件。已提供详情、默认/日期/省市查询、名称搜索、稳定分页、持久查询短码、缓存、全部结果单图、可配置裸交互、原文件入口、两套内置主题、本地 ZIP 导入、会话主题、独立改色和可选 AI 总结。**开发中，尚未完成首版全部功能及真实平台验收。**主题商店计划在 P3 落地，Discord 计划在 P2 完成。
 
 ## 当前安装与使用
 
@@ -25,6 +25,18 @@
 /FEC 主题列表
 /FEC 主题导入
 /FEC 查询 --theme local:my-theme
+/FEC 查询 --theme builtin:liquidglass
+/FEC 主题默认
+/FEC 主题默认 全局 builtin:liquidglass
+/FEC 主题默认 本会话 builtin:material
+/FEC 主题默认 本会话 清除
+/FEC 主题配色 builtin:material
+/FEC 主题改色 builtin:liquidglass 主色 #bca7ff
+/FEC 主题改色 builtin:liquidglass 明暗 dark
+/FEC 主题改色 builtin:liquidglass background #172133
+/FEC 主题改色 builtin:liquidglass 重置
+/FEC 主题副本 builtin:liquidglass my-glass
+/FEC 主题导出 local:my-glass
 /FEC 状态
 ```
 
@@ -39,6 +51,10 @@
 AI 总结默认关闭。机器人管理者可在插件配置启用并选择 AstrBot 已配置模型，保存后重载；插件没有独立模型 Key。摘要使用模型从介绍前 12000 字选择有序原文片段，最多 1000 字，不接受模型补写的内容；调用超时、失败、未选模型或输出不可用均回退原文节选。总结与节选都保留来源入口。
 
 主题导入只允许机器人管理员：上传 ZIP 后回复 `/FEC 主题导入`；接入未提供引用文件内容时会提示。默认使用 `builtin:material`，用户可为查询、搜索、详情、选择、翻页或单图追加 `--theme <已安装标识>`，只影响本次输出。安装不改变默认值，同标识不覆盖；导入主题存放在插件数据目录，重载和插件更新保留。主题使用 HTML + Jinja2 与包内静态资源，契约和可运行样包见 [主题作者文档](themes/README.md)。执行 `python scripts/build_theme.py themes/material dist/material-theme.zip` 可打包样例。
+
+内置 `builtin:material`（初始默认）与 `builtin:liquidglass`。主题优先级为单次指定、本会话默认、全局默认、初始 Material；会话按平台实例和群/频道/私聊身份隔离。只有机器人管理员能设置/清除默认值、改色、保存副本或导出主题，群主/频道管理员身份不自动取得权限。默认值不可用时明确报错，可单次指定可用主题或清除对应默认值，不静默换主题。
+
+主色和 `light`/`dark` 模式独立保存，高级颜色只能修改主题声明的项，`主题配色` 可查看。配色按主题保存，对使用该主题的会话生效；与包版本独立，插件更新不覆盖用户状态。`主题副本` 克隆布局和当前配色为 `local:` 主题，后续源主题配色变化不影响副本。布局、字号和间距通过导出 ZIP 编辑并以新标识导入，不提供简化布局控件。导出 ZIP 包含声明、布局与资源，独立配色仍保存在宿主数据目录；导入/另存副本不切换默认主题。
 
 ## 开发和验收
 

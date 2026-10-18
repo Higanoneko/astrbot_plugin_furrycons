@@ -85,29 +85,90 @@ class Application:
         args = [arg for arg in args if arg != "--single"]
         try:
             if args == ["主题导入"]:
-                if not is_admin:
-                    raise UserError(
-                        "仅机器人管理员可以导入主题；群主或频道管理员身份不授予此权限。"
-                    )
-                if attachment is None:
-                    raise UserError(
-                        "请上传主题 ZIP 并回复 /FEC 主题导入；此接入须能提供引用文件内容，也可通过 WebUI 导入。"
-                    )
-                theme = self.themes.import_zip(attachment)
+                theme = await self.manage_theme("import", is_admin=is_admin, path=attachment)
                 return Reply(
                     text=f"已安装 {theme.key} · {theme.manifest['name']}。默认主题未改变；单次使用：--theme {theme.key}"
                 )
             if args == ["主题列表"]:
                 return Reply(text="已安装主题：\n" + "\n".join(self.themes.installed()))
-            theme_key = "builtin:material"
+            if len(args) == 2 and args[0] == "主题配色":
+                theme = await self.manage_theme("palette", key=args[1])
+                return Reply(
+                    text=f"{theme['key']} · 明暗 {theme['mode']}\n"
+                    + "\n".join(f"{key}：{value}" for key, value in theme["colors"].items())
+                )
+            if args and args[0] == "主题改色":
+                if len(args) == 3 and args[2] == "重置":
+                    theme = await self.manage_theme("reset_colors", is_admin=is_admin, key=args[1])
+                elif len(args) == 4:
+                    field, value = args[2:]
+                    changes = (
+                        {"primary": value}
+                        if field == "主色"
+                        else {"mode": value}
+                        if field == "明暗"
+                        else {"advanced": {field: value}}
+                    )
+                    theme = await self.manage_theme(
+                        "set_colors", is_admin=is_admin, key=args[1], changes=changes
+                    )
+                else:
+                    raise UserError(
+                        "用法：主题改色 <标识> 主色 <#RRGGBB>；明暗 <light|dark>；<高级颜色项> <#RRGGBB>；重置。"
+                    )
+                return Reply(
+                    text=f"已保存 {theme['key']} 的独立配色；明暗 {theme['mode']}，主色 {theme['colors']['primary']}。"
+                )
+            if len(args) >= 3 and args[0] == "主题副本":
+                theme = await self.manage_theme(
+                    "copy",
+                    is_admin=is_admin,
+                    key=args[1],
+                    identity=args[2],
+                    name=" ".join(args[3:]) or None,
+                )
+                return Reply(
+                    text=f"已保存本地副本 {theme.key}（来源 {args[1]}），原主题未改变。布局请导出 ZIP 编辑后以新标识导入。"
+                )
+            if len(args) == 2 and args[0] == "主题导出":
+                return Reply(file=await self.manage_theme("export", is_admin=is_admin, key=args[1]))
+            if args and args[0] == "主题默认":
+                if len(args) == 1:
+                    defaults = await self.manage_theme("defaults", chat=chat)
+                    return Reply(
+                        text=f"全局默认：{defaults['global'] or '未设置（Material）'}\n"
+                        f"本会话默认：{defaults['session'] or '未设置（继承全局）'}\n"
+                        f"当前生效：{defaults['effective']}"
+                    )
+                if len(args) == 3 and args[1] in ("全局", "本会话"):
+                    await self.manage_theme(
+                        "set_default",
+                        chat=chat,
+                        is_admin=is_admin,
+                        scope="global" if args[1] == "全局" else "session",
+                        key=None if args[2] == "清除" else args[2],
+                    )
+                    return Reply(
+                        text=f"已更新{args[1]}默认主题；当前生效：{self.themes.defaults(chat)['effective']}。"
+                    )
+                raise UserError(
+                    "用法：/FEC 主题默认 [全局|本会话] <主题标识|清除>；不带参数查看当前默认值。"
+                )
+            explicit_theme = None
             if "--theme" in args:
                 index = args.index("--theme")
                 if args.count("--theme") != 1 or index + 1 >= len(args):
                     raise UserError(
                         "单次主题用法：--theme <已安装主题标识>；可用 /FEC 主题列表 查看。"
                     )
-                theme_key = self.themes.get(args[index + 1]).key
+                explicit_theme = self.themes.get(args[index + 1]).key
                 args = args[:index] + args[index + 2 :]
+            theme_key = self.themes.defaults(chat)["effective"]
+            if args and (
+                args[0] in ("查询", "搜索", "详情", "选择", "翻页", "单图", "下一页", "上一页")
+                or args[0].isdigit()
+            ):
+                theme_key = self.themes.select_key(chat, explicit_theme)
             if quote_id is not None and (
                 (len(args) == 1 and (args[0].isdigit() or args[0] in ("下一页", "上一页")))
                 or (len(args) == 2 and args[0] in ("选择", "翻页"))
@@ -254,6 +315,41 @@ class Application:
             return False
         return self.snapshots.bind_message(chat, str(message_id), reply.query_code, reply.page)
 
+    async def manage_theme(self, action, *, chat="local", is_admin=False, **options):
+        """The same permission and state decisions serve chat and WebUI callers."""
+        if action == "defaults":
+            return self.themes.defaults(chat)
+        if action == "palette":
+            return self.themes.get(options.get("key")).view()
+        if action == "list":
+            return self.themes.installed()
+        if not is_admin:
+            raise UserError("仅机器人管理员可以修改主题；群主或频道管理员身份不授予此权限。")
+        if action == "set_default":
+            if options.get("scope") not in ("global", "session") or "key" not in options:
+                raise UserError("默认主题范围须为 global 或 session。")
+            self.themes.set_default(
+                options.get("key"), chat=None if options["scope"] == "global" else chat
+            )
+            return self.themes.defaults(chat)
+        if action == "import":
+            if not options.get("path"):
+                raise UserError(
+                    "请上传主题 ZIP 并回复 /FEC 主题导入；此接入须能提供引用文件内容，也可通过 WebUI 导入。"
+                )
+            return self.themes.import_zip(options["path"])
+        if action == "set_colors":
+            return self.themes.set_colors(options.get("key"), options.get("changes"))
+        if action == "reset_colors":
+            return self.themes.reset_colors(options.get("key"))
+        if action == "copy":
+            return self.themes.copy_theme(
+                options.get("key"), options.get("identity"), options.get("name")
+            )
+        if action == "export":
+            return self.themes.export_zip(options.get("key"))
+        raise UserError("未知主题管理操作。")
+
     async def deliver(self, reply, transport, *, chat):
         def record(receipt):
             message_id = receipt.get("message_id") if isinstance(receipt, dict) else receipt
@@ -272,3 +368,4 @@ class Application:
                 self.cache.close()
                 self.snapshots.close()
                 self.outputs.close()
+                self.themes.close()

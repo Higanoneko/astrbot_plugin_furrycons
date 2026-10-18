@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><style>:root{--primary:{{ theme.colors.primary }};--background:{{ theme.colors.background }};--surface:{{ theme.colors.surface }};--text:{{ theme.colors.text }};--muted:{{ theme.colors.muted }};--tag:{{ theme.colors.tag }};--tag-text:{{ theme.colors.tag_text }};--note:{{ theme.colors.note }};--outline:{{ theme.colors.outline }};--glow:{{ theme.colors.glow }}}</style><link rel="stylesheet" href="{{ asset('glass.css') }}"></head><body>
+<div class="brand">FURRYCONS · 展会详情 / LIQUID GLASS</div>
+<h1>{{ event.name }}</h1><span class="tag">{{ event.status_label }}</span>
+<div class="card"><div class="label">举办时间 · {{ event.timezone }}</div>{{ event.start_label }} — {{ event.end_label }}<div class="label">地区与地址</div>{{ event.region }} · {{ event.address }}</div>
+<div class="card"><div class="label">{{ event.introduction_type }}</div><div class="intro">{{ event.introduction }}</div></div>
+<div class="card source"><div class="label">数据来源 · FurryCons</div>{{ event.source }}</div>
+<footer>展会 ID：{{ event.id }}<br>缺失信息以数据源为准，请通过来源入口核对最新安排。</footer>
+</body></html>

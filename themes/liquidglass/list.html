@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><style>:root{--primary:{{ theme.colors.primary }};--background:{{ theme.colors.background }};--surface:{{ theme.colors.surface }};--text:{{ theme.colors.text }};--muted:{{ theme.colors.muted }};--tag:{{ theme.colors.tag }};--tag-text:{{ theme.colors.tag_text }};--note:{{ theme.colors.note }};--outline:{{ theme.colors.outline }};--glow:{{ theme.colors.glow }}}</style><link rel="stylesheet" href="{{ asset('glass.css') }}"></head><body>
+<div class="brand">FURRYCONS · 展会日历 / LIQUID GLASS</div><h1>展会查询</h1>
+<div class="meta">{{ query.range }}<br>查询短码 {{ query.code }} · 第 {{ query.page }}/{{ query.pages }} 页 · 共 {{ query.total }} 场</div>
+{% for event in query.events %}<article class="card"><h2>{{ event.number }}. {{ event.name }}</h2>
+<span class="tag">{{ event.status_label }}</span>
+{% if event.schedule_note %}<div class="note">{{ event.schedule_note }}</div>{% else %}<div>{{ event.start_label }} — {{ event.end_label }}</div>{% endif %}
+<div>{{ event.region }}</div><div class="id">ID：{{ event.id }}</div></article>{% endfor %}
+<footer>数据来源：FurryCons · https://www.furrycons.cn<br>日期待定记录独立标注，不使用延期前的旧日期。<br>翻页：/FEC 翻页 {{ query.code }} &lt;页码&gt;</footer>
+</body></html>

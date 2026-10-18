@@ -1,0 +1,67 @@
+{
+  "format_version": 1,
+  "data_version": 1,
+  "id": "liquidglass",
+  "name": "Apple LiquidGlass",
+  "version": "1.0.0",
+  "author": "higan",
+  "compatibility": {
+    "plugin_min": "0.1.0",
+    "plugin_max_exclusive": "1.0.0"
+  },
+  "templates": {
+    "list": "list.html",
+    "detail": "detail.html"
+  },
+  "colors": {
+    "primary": "#3668c6",
+    "mode": "light",
+    "advanced": {
+      "background": {
+        "label": "背景",
+        "light": "#e9eff9",
+        "dark": "#101b2c"
+      },
+      "surface": {
+        "label": "玻璃表面",
+        "light": "#ffffff",
+        "dark": "#24364f"
+      },
+      "text": {
+        "label": "正文",
+        "light": "#132745",
+        "dark": "#f0f6ff"
+      },
+      "muted": {
+        "label": "次要文字",
+        "light": "#526681",
+        "dark": "#c3d2e7"
+      },
+      "tag": {
+        "label": "状态底色",
+        "light": "#d7e4ff",
+        "dark": "#31486b"
+      },
+      "tag_text": {
+        "label": "状态文字",
+        "light": "#244777",
+        "dark": "#d7e4ff"
+      },
+      "note": {
+        "label": "日期提示",
+        "light": "#9c5200",
+        "dark": "#ffd59a"
+      },
+      "outline": {
+        "label": "玻璃边缘",
+        "light": "#ffffff",
+        "dark": "#7890ad"
+      },
+      "glow": {
+        "label": "背景光晕",
+        "light": "#b7a5ff",
+        "dark": "#5b3b9a"
+      }
+    }
+  }
+}

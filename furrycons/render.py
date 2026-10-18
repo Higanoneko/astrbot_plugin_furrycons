@@ -24,6 +24,7 @@ class BrowserRenderer:
         self._engine = None
         self._browser = None
         self.themes = themes or ThemeStore()
+        self._owns_themes = themes is None
 
     async def _launch(self):
         async with self._launch_lock:
@@ -54,6 +55,8 @@ class BrowserRenderer:
         if self._engine:
             await self._engine.stop()
             self._engine = None
+        if self._owns_themes:
+            self.themes.close()
 
     async def status(self):
         try:

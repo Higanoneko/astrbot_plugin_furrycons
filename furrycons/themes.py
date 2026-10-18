@@ -2,18 +2,21 @@
 
 import json
 import re
+import shutil
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 from urllib.parse import quote, unquote, urlsplit
-from zipfile import BadZipFile, ZipFile
+from uuid import uuid4
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
 from jinja2 import FileSystemLoader, StrictUndefined, TemplateError, nodes, select_autoescape
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from .errors import UserError
+from .theme_state import ThemePreferences
 
 BUILTINS = Path(__file__).resolve().parent.parent / "themes"
 PLUGIN_VERSION = (0, 1, 0)
@@ -100,8 +103,12 @@ def _manifest(value):
         raise UserError("不支持此主题模板数据版本；当前支持 data_version=1。")
     if not isinstance(value["id"], str) or not IDENTIFIER.fullmatch(value["id"]):
         raise UserError("主题标识须为小写字母开头的 1–64 位字母、数字、下划线或连字符。")
-    for field in ("name", "author"):
-        if not isinstance(value[field], str) or not value[field].strip() or len(value[field]) > 100:
+    for metadata_name in ("name", "author"):
+        if (
+            not isinstance(value[metadata_name], str)
+            or not value[metadata_name].strip()
+            or len(value[metadata_name]) > 100
+        ):
             raise UserError("主题名称与作者须为 1–100 字的非空文本。")
     _version(value["version"])
     compatibility = value["compatibility"]
@@ -152,6 +159,8 @@ class Theme:
     key: str
     path: Path
     manifest: dict
+    overrides: dict = field(default_factory=dict)
+    origin: str | None = None
 
     def resource(self, name):
         relative = package_path(name)
@@ -166,15 +175,20 @@ class Theme:
 
     def view(self):
         colors = self.manifest["colors"]
+        mode = self.overrides.get("mode", colors["mode"])
         return {
             "key": self.key,
             "id": self.manifest["id"],
             "name": self.manifest["name"],
             "version": self.manifest["version"],
-            "mode": colors["mode"],
+            "mode": mode,
+            "origin": self.origin,
             "colors": {
-                "primary": colors["primary"],
-                **{k: v[colors["mode"]] for k, v in colors["advanced"].items()},
+                "primary": self.overrides.get("primary", colors["primary"]),
+                **{
+                    k: self.overrides.get("advanced", {}).get(k, v[mode])
+                    for k, v in colors["advanced"].items()
+                },
             },
         }
 
@@ -266,6 +280,7 @@ def load_theme(path, namespace):
             theme.resource(template)
         validate_examples(theme)
         return theme
+
     except (OSError, UnicodeError, json.JSONDecodeError, TemplateError, RecursionError):
         raise UserError("主题声明、模板语法或资源无法读取，请检查 UTF-8 文件与模板契约。") from None
 
@@ -430,6 +445,35 @@ class ThemeStore:
         self.local_dir = Path(data_dir) / "themes" if data_dir else None
         if self.local_dir:
             self.local_dir.mkdir(parents=True, exist_ok=True)
+        self.preferences = ThemePreferences(
+            Path(data_dir) / "theme_state.sqlite3" if data_dir else ":memory:"
+        )
+
+    def defaults(self, chat):
+        global_theme, session_theme = self.preferences.default(), self.preferences.default(chat)
+        return {
+            "global": global_theme,
+            "session": session_theme,
+            "effective": session_theme or global_theme or "builtin:material",
+        }
+
+    def select_key(self, chat, explicit=None):
+        key = explicit or self.defaults(chat)["effective"]
+        try:
+            return self.get(key).key
+        except UserError as exc:
+            raise UserError(
+                f"主题 {key} 不可用：{exc} 可用 --theme 指定其他已安装主题，"
+                "或请机器人管理员清除对应默认值。"
+            ) from None
+
+    def set_default(self, theme_key, *, chat=None):
+        if theme_key is not None:
+            theme_key = self.get(theme_key).key
+        self.preferences.set_default(theme_key, chat)
+
+    def close(self):
+        self.preferences.close()
 
     def get(self, key="builtin:material"):
         if not isinstance(key, str) or key.count(":") != 1:
@@ -445,7 +489,96 @@ class ThemeStore:
         theme = load_theme(root / identity, namespace)
         if theme.key != key:
             raise UserError("主题目录与声明标识不一致，请重新导入正确主题包。")
-        return theme
+        return replace(
+            theme, overrides=self.preferences.colors(key), origin=self.preferences.origin(key)
+        )
+
+    def set_colors(self, key, changes):
+        theme = self.get(key)
+        if (
+            not isinstance(changes, dict)
+            or not changes
+            or set(changes) - {"primary", "mode", "advanced"}
+        ):
+            raise UserError("配色仅支持 primary、mode 与主题声明的 advanced 颜色项。")
+        current = self.preferences.colors(key)
+        for name in ("primary", "mode"):
+            if name not in changes:
+                continue
+            value = changes[name]
+            if value is None:
+                current.pop(name, None)
+            elif name == "primary" and isinstance(value, str) and COLOR.fullmatch(value):
+                current[name] = value.lower()
+            elif name == "mode" and value in ("light", "dark"):
+                current[name] = value
+            else:
+                raise UserError("主色须为六位十六进制颜色；明暗模式须为 light 或 dark。")
+        if "advanced" in changes:
+            declared = theme.manifest["colors"]["advanced"]
+            patch = changes["advanced"]
+            if not isinstance(patch, dict) or set(patch) - set(declared):
+                raise UserError("此主题未声明该高级颜色项，请使用 /FEC 主题配色 <标识> 查看。")
+            advanced = dict(current.get("advanced", {}))
+            for name, value in patch.items():
+                if value is None:
+                    advanced.pop(name, None)
+                elif isinstance(value, str) and COLOR.fullmatch(value):
+                    advanced[name] = value.lower()
+                else:
+                    raise UserError("高级颜色须为六位十六进制颜色，不能填写 CSS 或布局内容。")
+            if advanced:
+                current["advanced"] = advanced
+            else:
+                current.pop("advanced", None)
+        self.preferences.set_colors(key, current)
+        return self.get(key).view()
+
+    def reset_colors(self, key):
+        self.get(key)
+        self.preferences.set_colors(key, {})
+        return self.get(key).view()
+
+    def copy_theme(self, key, identity, name=None):
+        if self.local_dir is None:
+            raise UserError("未配置框架插件数据目录，无法保存本地副本。")
+        if not isinstance(identity, str) or not IDENTIFIER.fullmatch(identity):
+            raise UserError("本地副本标识须为小写字母开头的 1–64 位字母、数字、下划线或连字符。")
+        source = self.get(key)
+        destination = self.local_dir / identity
+        if destination.exists():
+            raise UserError("该本地副本标识已存在，未覆盖；请使用新的标识。")
+        try:
+            with TemporaryDirectory(prefix=".copy-", dir=self.local_dir) as temporary:
+                shutil.copytree(source.path, temporary, dirs_exist_ok=True)
+                manifest = dict(source.manifest)
+                manifest.update(id=identity, name=name or (manifest["name"][:86] + "（本地副本）"))
+                (Path(temporary) / "theme.json").write_text(
+                    json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                copied = load_theme(temporary, "local")
+                Path(temporary).rename(destination)
+            self.preferences.set_colors(copied.key, source.overrides)
+            self.preferences.set_origin(copied.key, key)
+            return self.get(copied.key)
+        except OSError:
+            raise UserError("本地主题副本保存失败，请检查插件数据目录权限和空间。") from None
+
+    def export_zip(self, key):
+        if self.local_dir is None:
+            raise UserError("未配置框架插件数据目录，无法导出主题包。")
+        theme = self.get(key)
+        folder = self.local_dir.parent / "theme_exports"
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"{theme.manifest['id']}-{uuid4().hex[:8]}.zip"
+        try:
+            with ZipFile(target, "w", ZIP_DEFLATED) as archive:
+                for path in sorted(theme.path.rglob("*")):
+                    if path.is_file():
+                        archive.write(path, path.relative_to(theme.path).as_posix())
+            return target
+        except OSError:
+            raise UserError("主题包导出失败，请检查插件数据目录空间和权限。") from None
 
     def installed(self):
         result = []
