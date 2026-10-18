@@ -1,12 +1,15 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from math import ceil
 from pathlib import Path
 
 from .cache import CatalogCache
+from .delivery import deliver
 from .errors import UserError
+from .outputs import OutputStore
 from .query import SnapshotStore, default_query, is_undated, name_query, query_options
+from .summary import introduction_summary
 
 
 @dataclass(frozen=True)
@@ -15,18 +18,49 @@ class Reply:
     image: Path | None = None
     query_code: str | None = None
     page: int = 0
+    file: Path | None = None
+    output_code: str | None = None
 
 
 class Application:
     """Chat and future management entry points share the same decisions."""
 
-    def __init__(self, settings, source, renderer, *, clock=None, snapshots=None, cache=None):
+    def __init__(
+        self,
+        settings,
+        source,
+        renderer,
+        *,
+        clock=None,
+        snapshots=None,
+        cache=None,
+        model=None,
+        outputs=None,
+    ):
         self.settings, self.source, self.renderer = settings, source, renderer
         self.clock = clock or (lambda: datetime.now(UTC))
         self.snapshots = snapshots or SnapshotStore()
         self.cache = cache or CatalogCache()
+        self.model = model
+        self.outputs = outputs or OutputStore()
 
     async def execute(self, command: str, *, chat="local", user="local", quote_id=None):
+        try:
+            reply = await self._execute(command, chat=chat, user=user, quote_id=quote_id)
+            if reply.image and reply.output_code is None:
+                code = self.outputs.register(
+                    reply.image, chat, self.clock(), self.settings.interaction_hours * 3600
+                )
+                reply = replace(
+                    reply,
+                    output_code=code,
+                    text=(reply.text + "\n" if reply.text else "") + f"原文件：/FEC 原图 {code}",
+                )
+            return reply
+        except UserError as exc:
+            return Reply(text=str(exc))
+
+    async def _execute(self, command: str, *, chat, user, quote_id):
         args = command.strip().split()
         single = "--single" in args
         args = [arg for arg in args if arg != "--single"]
@@ -44,6 +78,8 @@ class Application:
                 )
             if args == ["状态"]:
                 return Reply(text=await self.renderer.status())
+            if len(args) == 2 and args[0] in ("原图", "原文件"):
+                return Reply(file=self.outputs.get(args[1], chat, self.clock()))
             if args and args[0] == "查询":
                 query_options(args[1:], self.clock(), self.settings.timezone)
                 catalog, note = await self.cache.load(self.source, self.settings, self.clock)
@@ -80,7 +116,8 @@ class Application:
             if len(args) == 2 and args[0] == "详情":
                 return await self._detail(args[1])
             return Reply(
-                text="用法：/FEC 查询；/FEC 翻页 <短码> <页码>；/FEC 选择 <短码> <序号>；/FEC 详情 <ID>；/FEC 状态。"
+                text="用法：/FEC 查询；/FEC 搜索 <名称>；/FEC 翻页 <短码> <页码>；"
+                "/FEC 选择 <短码> <序号>；/FEC 详情 <ID>；/FEC 原图 <输出码>；/FEC 状态。"
             )
         except UserError as exc:
             return Reply(text=str(exc))
@@ -88,6 +125,10 @@ class Application:
     async def _detail(self, identity):
         convention = await self.source.detail(identity)
         view = convention.detail_view(self.settings.timezone)
+        summary = await introduction_summary(convention.description, self.settings, self.model)
+        if summary is not None:
+            view["introduction"] = summary
+            view["introduction_type"] = "AI 总结"
         return Reply(image=await self.renderer.detail(view))
 
     async def interact(self, text, *, chat="local", user="local", quote_id=None):
@@ -166,6 +207,14 @@ class Application:
             return False
         return self.snapshots.bind_message(chat, str(message_id), reply.query_code, reply.page)
 
+    async def deliver(self, reply, transport, *, chat):
+        def record(receipt):
+            message_id = receipt.get("message_id") if isinstance(receipt, dict) else receipt
+            if isinstance(message_id, (str, int)) and not isinstance(message_id, bool):
+                self.record_delivery(reply, chat=chat, message_id=message_id)
+
+        return await deliver(reply, transport, record)
+
     async def close(self):
         try:
             await self.source.close()
@@ -175,3 +224,4 @@ class Application:
             finally:
                 self.cache.close()
                 self.snapshots.close()
+                self.outputs.close()

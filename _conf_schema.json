@@ -55,6 +55,24 @@
     "type": "bool",
     "default": false
   },
+  "ai_summary": {
+    "description": "启用详情 AI 总结（默认原文节选）",
+    "type": "bool",
+    "default": false,
+    "hint": "仅由机器人管理者启用。模型选择介绍原句形成摘要；输出无效、无模型或调用失败时仍显示原文节选。"
+  },
+  "summary_provider_id": {
+    "description": "总结使用的 AstrBot 已配置模型",
+    "type": "string",
+    "default": "",
+    "_special": "select_provider",
+    "hint": "复用框架模型与凭据，留空时回退原文节选。保存后重载插件。"
+  },
+  "summary_timeout": {
+    "description": "总结超时秒数（1–120）",
+    "type": "int",
+    "default": 30
+  },
   "bare_ids": {
     "description": "允许裸 UUID 展会 ID 查询",
     "type": "bool",

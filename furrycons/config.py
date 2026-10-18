@@ -19,6 +19,9 @@ class Settings:
     bare_numbers: bool = False
     bare_names: bool = False
     bare_ids: bool = False
+    ai_summary: bool = False
+    summary_provider_id: str = ""
+    summary_timeout: int = 30
 
     @classmethod
     def from_dict(cls, value: dict):
@@ -48,7 +51,11 @@ class Settings:
             value = getattr(settings, name)
             if type(value) not in (int, float) or not 0 <= value <= 525600:
                 raise UserError("缓存与故障回退时限须为非负有限数值。")
-        for name in ("bare_numbers", "bare_names", "bare_ids"):
+        for name in ("bare_numbers", "bare_names", "bare_ids", "ai_summary"):
             if type(getattr(settings, name)) is not bool:
-                raise UserError("裸数字、裸名称与裸 ID 开关须分别为布尔值。")
+                raise UserError("交互与 AI 总结开关须分别为布尔值。")
+        if not isinstance(settings.summary_provider_id, str):
+            raise UserError("总结模型须选择 AstrBot 已配置模型的标识。")
+        if type(settings.summary_timeout) is not int or not 1 <= settings.summary_timeout <= 120:
+            raise UserError("总结超时须为 1–120 秒整数。")
         return settings
