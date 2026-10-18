@@ -122,6 +122,7 @@ class Snapshot:
 
 class SnapshotStore:
     def __init__(self, path=":memory:"):
+        self.command_entry = "FEC"
         self.connection = sqlite3.connect(path)
         self.connection.execute("""CREATE TABLE IF NOT EXISTS snapshots (
             code TEXT PRIMARY KEY, chat TEXT NOT NULL, user TEXT NOT NULL,
@@ -129,6 +130,9 @@ class SnapshotStore:
         self.connection.execute("""CREATE TABLE IF NOT EXISTS replies (
             chat TEXT NOT NULL, message TEXT NOT NULL, code TEXT NOT NULL, page INTEGER NOT NULL,
             PRIMARY KEY(chat, message))""")
+        self.connection.execute("""CREATE TABLE IF NOT EXISTS page_views (
+            chat TEXT NOT NULL, user TEXT NOT NULL, code TEXT NOT NULL, page INTEGER NOT NULL,
+            PRIMARY KEY(chat, user, code))""")
         self.connection.commit()
 
     def create(self, chat, user, events, label, page_size, now, lifetime, timezone="Asia/Shanghai"):
@@ -170,10 +174,12 @@ class SnapshotStore:
             (code.upper(), chat),
         ).fetchone()
         if row is None:
-            raise UserError("此聊天没有该查询短码，请核对短码或重新 /FEC 查询。")
+            raise UserError(f"此聊天没有该查询短码，请核对短码或重新 /{self.command_entry} 查询。")
         payload, created, expires = row
         if now.timestamp() >= expires:
-            raise UserError("查询已过期，请重新 /FEC 查询；重启不会延长原有效期。")
+            raise UserError(
+                f"查询已过期，请重新 /{self.command_entry} 查询；重启不会延长原有效期。"
+            )
         data = json.loads(payload)
         return Snapshot(
             code.upper(),
@@ -195,7 +201,9 @@ class SnapshotStore:
             (chat, user),
         ).fetchone()
         if not row:
-            raise UserError("你在此聊天没有可用的最近查询，请先 /FEC 查询，或使用明确短码选择。")
+            raise UserError(
+                f"你在此聊天没有可用的最近查询，请先 /{self.command_entry} 查询，或使用明确短码选择。"
+            )
         return self.get(row[0], chat, now)
 
     def bind_message(self, chat, message, code, page):
@@ -216,6 +224,18 @@ class SnapshotStore:
         ).fetchone()
         if not row:
             raise UserError(
-                "无法关联被引用的列表，请使用图片上的查询短码：/FEC 选择 <短码> <序号> 或 /FEC 翻页 <短码> <页码>。"
+                f"无法关联被引用的列表，请使用图片上的查询短码：/{self.command_entry} 选择 <短码> <序号> 或 /{self.command_entry} 翻页 <短码> <页码>。"
             )
         return self.get(row[0], chat, now), row[1]
+
+    def current_page(self, chat, user, code):
+        row = self.connection.execute(
+            "SELECT page FROM page_views WHERE chat=? AND user=? AND code=?", (chat, user, code)
+        ).fetchone()
+        return row[0] if row else 1
+
+    def remember_page(self, chat, user, code, page):
+        with self.connection:
+            self.connection.execute(
+                "INSERT OR REPLACE INTO page_views VALUES (?, ?, ?, ?)", (chat, user, code, page)
+            )

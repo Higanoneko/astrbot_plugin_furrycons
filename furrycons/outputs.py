@@ -10,6 +10,7 @@ from .errors import UserError
 
 class OutputStore:
     def __init__(self, path=":memory:", image_root=None):
+        self.command_entry = "FEC"
         self.connection = sqlite3.connect(path)
         self.image_root = Path(image_root).resolve() if image_root else None
         self.connection.execute("""CREATE TABLE IF NOT EXISTS outputs (
@@ -52,7 +53,9 @@ class OutputStore:
             (code.upper(), chat),
         ).fetchone()
         if row is None:
-            raise UserError("当前聊天中没有该输出，请使用图片附带的 /FEC 原图 <输出码>。")
+            raise UserError(
+                f"当前聊天中没有该输出，请使用图片附带的 /{self.command_entry} 原图 <输出码>。"
+            )
         if now.timestamp() >= row[2]:
             raise UserError("原文件获取入口已过期，请重新查询生成图片。")
         path = self._path(row[0])

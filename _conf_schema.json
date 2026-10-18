@@ -1,4 +1,16 @@
 {
+  "command_entry": {
+    "description": "主命令入口（不含唤醒前缀）",
+    "type": "string",
+    "default": "FEC",
+    "hint": "保存后重载插件；与已启用插件的主入口或别名冲突时配置不可生效。"
+  },
+  "function_aliases": {
+    "description": "直接绑定功能的顶层快捷入口",
+    "type": "list",
+    "default": ["查询展会=查询"],
+    "hint": "每项为 快捷入口=功能，例如 找展会=搜索、展会详情=详情、展会改色=主题改色。修改主入口不会改变功能指向；保存后重载。"
+  },
   "api_base": {
     "description": "FurryCons 开放接口地址",
     "type": "string",

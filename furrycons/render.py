@@ -25,6 +25,7 @@ class BrowserRenderer:
         self._browser = None
         self.themes = themes or ThemeStore()
         self._owns_themes = themes is None
+        self.themes.command_entry = settings.command_entry
 
     async def _launch(self):
         async with self._launch_lock:
@@ -45,7 +46,7 @@ class BrowserRenderer:
             raise RenderError(
                 "浏览器不可用。请机器人管理者在插件环境运行 python -m playwright install chromium，"
                 "Linux 还需安装系统依赖（python -m playwright install-deps chromium）；"
-                "或配置兼容的浏览器路径后重载。使用 /FEC 状态 检查。"
+                f"或配置兼容的浏览器路径后重载。使用 /{self.settings.command_entry} 状态 检查。"
             ) from None
 
     async def close(self):

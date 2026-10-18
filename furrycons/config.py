@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .commands import CommandRoutes
 from .errors import UserError
 
 
@@ -22,6 +23,8 @@ class Settings:
     ai_summary: bool = False
     summary_provider_id: str = ""
     summary_timeout: int = 30
+    command_entry: str = "FEC"
+    function_aliases: list[str] = field(default_factory=lambda: ["查询展会=查询"])
 
     @classmethod
     def from_dict(cls, value: dict):
@@ -58,4 +61,5 @@ class Settings:
             raise UserError("总结模型须选择 AstrBot 已配置模型的标识。")
         if type(settings.summary_timeout) is not int or not 1 <= settings.summary_timeout <= 120:
             raise UserError("总结超时须为 1–120 秒整数。")
+        CommandRoutes(settings)
         return settings

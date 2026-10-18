@@ -5,6 +5,7 @@ from math import ceil
 from pathlib import Path
 
 from .cache import CatalogCache
+from .commands import CommandRoutes
 from .delivery import deliver
 from .errors import UserError
 from .outputs import OutputStore
@@ -46,6 +47,17 @@ class Application:
         self.model = model
         self.outputs = outputs or OutputStore()
         self.themes = themes or ThemeStore()
+        self.snapshots.command_entry = self.outputs.command_entry = self.themes.command_entry = (
+            settings.command_entry
+        )
+
+    @property
+    def entry(self):
+        return "/" + self.settings.command_entry
+
+    async def dispatch(self, text, **context):
+        command = CommandRoutes(self.settings).parse(text)
+        return await self.execute(command, **context) if command is not None else Reply()
 
     async def execute(
         self,
@@ -73,8 +85,11 @@ class Application:
                 reply = replace(
                     reply,
                     output_code=code,
-                    text=(reply.text + "\n" if reply.text else "") + f"原文件：/FEC 原图 {code}",
+                    text=(reply.text + "\n" if reply.text else "")
+                    + f"原文件：{self.entry} 原图 {code}",
                 )
+            if reply.image and reply.query_code:
+                self.snapshots.remember_page(chat, user, reply.query_code, reply.page)
             return reply
         except UserError as exc:
             return Reply(text=str(exc))
@@ -152,14 +167,14 @@ class Application:
                         text=f"已更新{args[1]}默认主题；当前生效：{self.themes.defaults(chat)['effective']}。"
                     )
                 raise UserError(
-                    "用法：/FEC 主题默认 [全局|本会话] <主题标识|清除>；不带参数查看当前默认值。"
+                    f"用法：{self.entry} 主题默认 [全局|本会话] <主题标识|清除>；不带参数查看当前默认值。"
                 )
             explicit_theme = None
             if "--theme" in args:
                 index = args.index("--theme")
                 if args.count("--theme") != 1 or index + 1 >= len(args):
                     raise UserError(
-                        "单次主题用法：--theme <已安装主题标识>；可用 /FEC 主题列表 查看。"
+                        f"单次主题用法：--theme <已安装主题标识>；可用 {self.entry} 主题列表 查看。"
                     )
                 explicit_theme = self.themes.get(args[index + 1]).key
                 args = args[:index] + args[index + 2 :]
@@ -197,7 +212,7 @@ class Application:
                 )
             if args and args[0] == "搜索":
                 if len(args) < 2:
-                    raise UserError("请提供名称：/FEC 搜索 <展会名称>。")
+                    raise UserError(f"请提供名称：{self.entry} 搜索 <展会名称>。")
                 catalog, note = await self.cache.load(self.source, self.settings, self.clock)
                 events, label = name_query(catalog, " ".join(args[1:]))
                 return await self._query_reply(
@@ -206,15 +221,23 @@ class Application:
             if len(args) == 2 and args[0] == "单图":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
                 return await self._page(snapshot, 1, all_results=True, theme_key=theme_key)
+            if len(args) == 2 and args[0] in ("下一页", "上一页"):
+                snapshot = self.snapshots.get(args[1], chat, self.clock())
+                page = self.snapshots.current_page(chat, user, snapshot.code)
+                return await self._page(
+                    snapshot, page + (1 if args[0] == "下一页" else -1), theme_key=theme_key
+                )
             if len(args) == 3 and args[0] == "翻页":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
                 if len(args[2]) > 9 or not args[2].isascii() or not args[2].isdigit():
-                    raise UserError("页码须为正整数。用法：/FEC 翻页 <短码> <页码>。")
+                    raise UserError(f"页码须为正整数。用法：{self.entry} 翻页 <短码> <页码>。")
                 return await self._page(snapshot, int(args[2]), theme_key=theme_key)
             if len(args) == 3 and args[0] == "选择":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
                 if len(args[2]) > 9 or not args[2].isascii() or not args[2].isdigit():
-                    raise UserError("序号须为列表上的正整数。用法：/FEC 选择 <短码> <序号>。")
+                    raise UserError(
+                        f"序号须为列表上的正整数。用法：{self.entry} 选择 <短码> <序号>。"
+                    )
                 index = int(args[2])
                 if not 1 <= index <= len(snapshot.events):
                     raise UserError(f"选择序号超出范围，请使用 1–{len(snapshot.events)}。")
@@ -222,8 +245,8 @@ class Application:
             if len(args) == 2 and args[0] == "详情":
                 return await self._detail(args[1], theme_key)
             return Reply(
-                text="用法：/FEC 查询；/FEC 搜索 <名称>；/FEC 翻页 <短码> <页码>；"
-                "/FEC 选择 <短码> <序号>；/FEC 详情 <ID>；/FEC 原图 <输出码>；/FEC 状态。"
+                text=f"用法：{self.entry} 查询；{self.entry} 搜索 <名称>；{self.entry} 翻页 <短码> <页码>；"
+                f"{self.entry} 选择 <短码> <序号>；{self.entry} 详情 <ID>；{self.entry} 原图 <输出码>；{self.entry} 状态。"
             )
         except UserError as exc:
             return Reply(text=str(exc))
@@ -293,6 +316,7 @@ class Application:
                 view["schedule_note"] = ""
             events.append(view)
         data = {
+            "command_entry": self.settings.command_entry,
             "theme_key": theme_key,
             "events": events,
             "range": ("全部结果单图 · " if all_results else "") + snapshot.label,
@@ -304,7 +328,7 @@ class Application:
         path = await self.renderer.listing(data)
         return Reply(
             text=f"查询短码 {snapshot.code} · 第 {page}/{pages} 页 · 共 {len(snapshot.events)} 场。\n"
-            f"翻页：/FEC 翻页 {snapshot.code} <页码>\n选择：/FEC 选择 {snapshot.code} <序号>",
+            f"翻页：{self.entry} 翻页 {snapshot.code} <页码>\n选择：{self.entry} 选择 {snapshot.code} <序号>",
             image=path,
             query_code=snapshot.code,
             page=page,
@@ -335,7 +359,7 @@ class Application:
         if action == "import":
             if not options.get("path"):
                 raise UserError(
-                    "请上传主题 ZIP 并回复 /FEC 主题导入；此接入须能提供引用文件内容，也可通过 WebUI 导入。"
+                    f"请上传主题 ZIP 并回复 {self.entry} 主题导入；此接入须能提供引用文件内容，也可通过 WebUI 导入。"
                 )
             return self.themes.import_zip(options["path"])
         if action == "set_colors":

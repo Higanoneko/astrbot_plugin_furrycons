@@ -36,7 +36,7 @@ ZIP 根目录必须含 `theme.json`，禁止额外包一层文件夹。UTF-8 声
 | 变量 | 数据 |
 | --- | --- |
 | `event` | 仅详情：`id`、`name`、`status`、`status_label`、`start_label`、`end_label`、`timezone`、`region`、`address`、`introduction`、`introduction_type`、`source`，均为已规范化字符串 |
-| `query` | 仅列表：`range`、`code`、`page`、`pages`、`total` 与 `events` 数组；每场包含上述展会字段，以及连续整数 `number` 与 `schedule_note` |
+| `query` | 仅列表：`range`、`code`、`page`、`pages`、`total`、`command_entry`（配置的主入口名称，无唤醒前缀）与 `events` 数组；每场包含上述展会字段，以及连续整数 `number` 与 `schedule_note` |
 | `theme` | 当前主题 `key`、`id`、`name`、`version`、`mode` 与 `colors` 字典；`colors.primary` 始终存在，高级键与声明一致 |
 | `asset('path')` | 返回包内静态资源 URL；路径必须存在且不能越出包目录。CSS 中相对资源以该 CSS 所在目录解析 |
 

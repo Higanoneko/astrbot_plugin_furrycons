@@ -22,7 +22,9 @@ class FurryConsSource:
 
     async def detail(self, event_id):
         if not isinstance(event_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event_id):
-            raise UserError("展会 ID 无效。请使用 /FEC 详情 <ID>，可从列表或来源链接获取 ID。")
+            raise UserError(
+                f"展会 ID 无效。请使用 /{self.settings.command_entry} 详情 <ID>，可从列表或来源链接获取 ID。"
+            )
         data = await self._get(f"event/{quote(event_id, safe='')}")
         convention = Convention.from_api(data)
         if convention.id != event_id:

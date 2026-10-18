@@ -377,6 +377,7 @@ def contract_examples():
         )
     }
     query = {
+        "command_entry": "FEC",
         "range": "示例查询范围",
         "code": "ABC123",
         "page": 1,
@@ -442,6 +443,7 @@ def validate_examples(theme):
 
 class ThemeStore:
     def __init__(self, data_dir=None):
+        self.command_entry = "FEC"
         self.local_dir = Path(data_dir) / "themes" if data_dir else None
         if self.local_dir:
             self.local_dir.mkdir(parents=True, exist_ok=True)
@@ -477,7 +479,9 @@ class ThemeStore:
 
     def get(self, key="builtin:material"):
         if not isinstance(key, str) or key.count(":") != 1:
-            raise UserError("主题标识须为 builtin:名称 或 local:名称；可用 /FEC 主题列表 查看。")
+            raise UserError(
+                f"主题标识须为 builtin:名称 或 local:名称；可用 /{self.command_entry} 主题列表 查看。"
+            )
         namespace, identity = key.split(":")
         if not IDENTIFIER.fullmatch(identity):
             raise UserError("主题标识无效，请查看已安装主题列表。")
@@ -485,7 +489,9 @@ class ThemeStore:
             BUILTINS if namespace == "builtin" else self.local_dir if namespace == "local" else None
         )
         if root is None or not (root / identity / "theme.json").is_file():
-            raise UserError("该主题尚未安装或已不可用，请使用 /FEC 主题列表 查看。")
+            raise UserError(
+                f"该主题尚未安装或已不可用，请使用 /{self.command_entry} 主题列表 查看。"
+            )
         theme = load_theme(root / identity, namespace)
         if theme.key != key:
             raise UserError("主题目录与声明标识不一致，请重新导入正确主题包。")
@@ -518,7 +524,9 @@ class ThemeStore:
             declared = theme.manifest["colors"]["advanced"]
             patch = changes["advanced"]
             if not isinstance(patch, dict) or set(patch) - set(declared):
-                raise UserError("此主题未声明该高级颜色项，请使用 /FEC 主题配色 <标识> 查看。")
+                raise UserError(
+                    f"此主题未声明该高级颜色项，请使用 /{self.command_entry} 主题配色 <标识> 查看。"
+                )
             advanced = dict(current.get("advanced", {}))
             for name, value in patch.items():
                 if value is None:

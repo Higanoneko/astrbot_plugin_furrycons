@@ -1,11 +1,18 @@
-from astrbot.api import AstrBotConfig
+from hashlib import sha256
+
+from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import File
 from astrbot.api.message_components import Reply as QuotedMessage
 from astrbot.api.star import Context, Star, StarTools
+from astrbot.core.star.filter.command import CommandFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import star_handlers_registry
 
 from .furrycons.app import Application
 from .furrycons.cache import CatalogCache
+from .furrycons.commands import CommandRoutes
 from .furrycons.config import Settings
 from .furrycons.outputs import OutputStore
 from .furrycons.query import SnapshotStore
@@ -13,6 +20,44 @@ from .furrycons.render import BrowserRenderer
 from .furrycons.source import FurryConsSource
 from .furrycons.summary import AstrBotSummaryModel
 from .furrycons.themes import ThemeStore
+
+
+def occupied_commands(module):
+    occupied = set()
+    for handler in star_handlers_registry:
+        if handler.handler_module_path == module or not handler.enabled:
+            continue
+        plugin = star_map.get(handler.handler_module_path)
+        if plugin is not None and not plugin.activated:
+            continue
+        for command_filter in handler.event_filters:
+            if isinstance(command_filter, (CommandFilter, CommandGroupFilter)):
+                occupied.update(command_filter.get_complete_command_names())
+    return occupied
+
+
+def command_handler(entry, action):
+    async def handler(plugin, event):
+        if entry in occupied_commands(type(plugin).__module__):
+            yield event.plain_result(
+                f"命令入口 {entry} 与其他插件冲突，请机器人管理者修改入口配置后重载。"
+            )
+            event.stop_event()
+            return
+        parts = event.message_str.strip().split(maxsplit=1)
+        command = (action + " " + (parts[1] if len(parts) == 2 else "")).strip()
+        async for result in plugin._respond(event, command):
+            yield result
+
+    handler.__name__ = (
+        "fec"
+        if not action
+        else "query_shortcut"
+        if entry == "查询展会"
+        else "shortcut_" + sha256(entry.encode()).hexdigest()[:16]
+    )
+    handler.__doc__ = "FurryCons 主入口" if not action else "FurryCons 功能快捷入口：" + action
+    return handler
 
 
 class AstrBotTransport:
@@ -35,6 +80,8 @@ class FurryConsPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         settings = Settings.from_dict(dict(config))
+        self.command_routes = CommandRoutes(settings)
+        self.command_routes.validate_occupied(occupied_commands(type(self).__module__))
         data_dir = StarTools.get_data_dir("astrbot_plugin_furrycons")
         themes = ThemeStore(data_dir)
         self.app = Application(
@@ -47,23 +94,18 @@ class FurryConsPlugin(Star):
             outputs=OutputStore(data_dir / "outputs.sqlite3", data_dir / "images"),
             themes=themes,
         )
+        # Use the supported decorator, after config is known and before the host
+        # binds module handlers to this instance. The host owns reload cleanup.
+        for entry, action in self.command_routes.bindings.items():
+            filter.command(entry)(command_handler(entry, action))
 
-    @filter.command("FEC")
-    async def fec(self, event: AstrMessageEvent):
-        """FurryCons：详情 <ID>、状态。"""
-        # The command filter consumes the prefix but leaves message_str intact.
-        text = event.message_str.strip()
-        offset = text.find("FEC")
-        command = text[offset + 3 :].strip() if offset >= 0 else ""
-        async for result in self._respond(event, command):
-            yield result
-
-    @filter.command("查询展会")
-    async def query_shortcut(self, event: AstrMessageEvent):
-        """查询未来一年展会。"""
-        tail = event.message_str.partition("查询展会")[2].strip()
-        async for result in self._respond(event, "查询 " + tail):
-            yield result
+    @filter.on_astrbot_loaded()
+    async def check_loaded_commands(self):
+        conflicts = sorted(
+            set(self.command_routes.bindings).intersection(occupied_commands(type(self).__module__))
+        )
+        if conflicts:
+            logger.warning("FurryCons 命令入口冲突：%s；请修改插件入口配置。", "、".join(conflicts))
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def incoming_interaction(self, event: AstrMessageEvent):
