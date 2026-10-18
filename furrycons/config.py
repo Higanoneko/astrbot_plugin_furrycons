@@ -30,9 +30,24 @@ class Settings:
     def from_dict(cls, value: dict):
         allowed = cls.__dataclass_fields__
         settings = cls(**{k: v for k, v in value.items() if k in allowed})
-        url = urlsplit(settings.api_base)
-        if url.scheme != "https" or not url.netloc or url.username or url.query or url.fragment:
+        if not isinstance(settings.api_base, str):
+            raise UserError("数据源必须是 HTTPS 地址字符串。")
+        try:
+            url = urlsplit(settings.api_base)
+            port = url.port
+        except ValueError:
+            raise UserError("数据源地址格式无效。") from None
+        if (
+            url.scheme != "https"
+            or not url.netloc
+            or url.username is not None
+            or url.query
+            or url.fragment
+            or any(c.isspace() or ord(c) < 32 for c in settings.api_base)
+        ):
             raise UserError("数据源必须是无账号、参数或片段的 HTTPS 地址。")
+        if not url.hostname or (port is not None and port <= 0):
+            raise UserError("数据源地址格式无效。")
         if not isinstance(settings.api_key, str) or any(c in settings.api_key for c in "\r\n"):
             raise UserError("API Key 格式无效，请检查配置。")
         try:

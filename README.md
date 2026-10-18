@@ -10,6 +10,10 @@
 
 在 AstrBot 插件配置中填写 FurryCons 工作台提供的 API Key，Authorization 使用原值。数据源默认 `https://api.furrycons.cn/open`，显示时区默认 `Asia/Shanghai`。保存后重载插件。
 
+也可从插件卡片的详情打开“FurryCons 快速配置”可视化视图，在 Dashboard 内配置数据源、时区、分页与缓存、入口及功能别名、裸触发和总结开关。页面通过框架 bridge 调用受认证保护的插件 API，不读取父页面登录信息。API Key 只显示是否已配置；留空保存会保留原值，勾选清除才删除。无效值或入口冲突不会保存，陈旧页面需重新读取配置。保存结果会标明待重载状态；回到插件管理页重载，再重新读取即可确认当前生效入口。
+
+配置沿用 AstrBot 的 `data/config/astrbot_plugin_furrycons_config.json`，由框架原子写入，与原生插件配置共用一份数据；插件目录更新不会覆盖它。Dashboard 登录身份或有框架 `plugin` 管理权限的 API 凭据可管理此接口，聊天管理操作独立检查机器人管理员身份。浏览器部署和主题管理的页面入口仍在开发中，当前使用对应配置与聊天命令。
+
 ```text
 /FEC 查询
 /查询展会

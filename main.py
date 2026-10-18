@@ -1,4 +1,6 @@
+import json
 from hashlib import sha256
+from pathlib import Path
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -10,6 +12,7 @@ from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
 
+from .furrycons.admin import AdminSettings
 from .furrycons.app import Application
 from .furrycons.cache import CatalogCache
 from .furrycons.commands import CommandRoutes
@@ -20,6 +23,7 @@ from .furrycons.render import BrowserRenderer
 from .furrycons.source import FurryConsSource
 from .furrycons.summary import AstrBotSummaryModel
 from .furrycons.themes import ThemeStore
+from .furrycons.web import AdminWeb
 
 
 def occupied_commands(module):
@@ -98,6 +102,17 @@ class FurryConsPlugin(Star):
         # binds module handlers to this instance. The host owns reload cleanup.
         for entry, action in self.command_routes.bindings.items():
             filter.command(entry)(command_handler(entry, action))
+        self.admin_settings = AdminSettings(
+            config,
+            settings,
+            config.save_config_async,
+            lambda: occupied_commands(type(self).__module__),
+        )
+        self.web = AdminWeb(
+            context,
+            self.admin_settings,
+            json.loads(Path(__file__).with_name("_conf_schema.json").read_text(encoding="utf-8")),
+        )
 
     @filter.on_astrbot_loaded()
     async def check_loaded_commands(self):

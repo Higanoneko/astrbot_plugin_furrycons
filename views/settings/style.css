@@ -1,0 +1,26 @@
+:root { color-scheme: light; --bg: #f5f7fb; --card: #fff; --text: #17233b; --muted: #53637c; --line: #ced7e5; --primary: #1b55aa; }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #101824; --card: #1b2637; --text: #e5ecf6; --muted: #afbdd1; --line: #4a5d77; --primary: #a9caff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, sans-serif; }
+main { max-width: 1000px; margin: auto; padding: 24px; }
+h1 { margin: 0 0 8px; font-size: 30px; }
+h2 { font-size: 20px; margin: 0 0 18px; }
+p { margin: 8px 0; }
+.eyebrow { color: var(--primary); font-weight: 700; }
+header, section { margin-bottom: 20px; }
+section { border: 1px solid var(--line); border-radius: 16px; padding: 24px; background: var(--card); }
+label { display: grid; gap: 6px; margin-top: 16px; font-weight: 600; }
+label.toggle { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+input:not([type="checkbox"]), textarea { width: 100%; background: var(--bg); color: var(--text); font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+textarea { resize: vertical; }
+input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--primary); flex-shrink: 0; }
+.hint, .note { color: var(--muted); font-size: 14px; }
+.hint { margin-top: 4px; }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; padding: 8px 0; }
+button { border: 1px solid var(--primary); border-radius: 8px; padding: 10px 22px; background: var(--primary); color: var(--card); font: inherit; font-weight: 600; cursor: pointer; }
+button.secondary { background: var(--card); color: var(--primary); }
+button:disabled { opacity: .55; cursor: wait; }
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+#status { padding: 14px; border-left: 4px solid var(--primary); margin: 20px 0; background: var(--card); }
+#error { padding: 14px; color: #a32020; background: #ffe9e9; border: 1px solid #c93434; border-radius: 8px; white-space: pre-wrap; }
+@media (max-width: 600px) { main { padding: 16px; } section { padding: 16px; } }
