@@ -33,6 +33,14 @@ class ThemePreferences:
         ).fetchone()
         return row[0] if row else None
 
+    def sessions(self):
+        return [
+            {"chat": scope.removeprefix("chat:"), "key": key}
+            for scope, key in self.connection.execute(
+                "SELECT scope, theme_key FROM theme_defaults WHERE scope != 'global' ORDER BY scope"
+            )
+        ]
+
     def set_default(self, theme_key, chat=None):
         scope = "global" if chat is None else "chat:" + chat
         with self.connection:

@@ -17,11 +17,13 @@ from .furrycons.app import Application
 from .furrycons.cache import CatalogCache
 from .furrycons.commands import CommandRoutes
 from .furrycons.config import Settings
+from .furrycons.deployment import BrowserDeployment
 from .furrycons.outputs import OutputStore
 from .furrycons.query import SnapshotStore
 from .furrycons.render import BrowserRenderer
 from .furrycons.source import FurryConsSource
 from .furrycons.summary import AstrBotSummaryModel
+from .furrycons.theme_web import ThemeWeb
 from .furrycons.themes import ThemeStore
 from .furrycons.web import AdminWeb
 
@@ -108,11 +110,14 @@ class FurryConsPlugin(Star):
             config.save_config_async,
             lambda: occupied_commands(type(self).__module__),
         )
+        self.deployment = BrowserDeployment(data_dir, self.app.renderer, lambda: dict(config))
         self.web = AdminWeb(
             context,
             self.admin_settings,
             json.loads(Path(__file__).with_name("_conf_schema.json").read_text(encoding="utf-8")),
+            self.deployment,
         )
+        self.theme_web = ThemeWeb(context, self.app, data_dir)
 
     @filter.on_astrbot_loaded()
     async def check_loaded_commands(self):
@@ -167,7 +172,9 @@ class FurryConsPlugin(Star):
     async def _respond(self, event, command):
         chat = self._chat(event)
         attachment = None
-        if command.strip() == "主题导入" and event.is_admin():
+        if (
+            command.strip() == "主题导入" or command.strip().startswith("主题更新 ")
+        ) and event.is_admin():
             quotes = [m for m in event.get_messages() if isinstance(m, QuotedMessage)]
             components = (
                 quotes[0].chain if len(quotes) == 1 else event.get_messages() if not quotes else []
@@ -198,4 +205,5 @@ class FurryConsPlugin(Star):
             yield event.plain_result(text)
 
     async def terminate(self):
+        await self.deployment.close()
         await self.app.close()

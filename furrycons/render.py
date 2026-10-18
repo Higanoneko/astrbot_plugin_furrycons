@@ -2,6 +2,7 @@ import asyncio
 import mimetypes
 import re
 import struct
+from importlib.metadata import version
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
@@ -9,6 +10,7 @@ from uuid import uuid4
 from playwright.async_api import Error, async_playwright
 
 from .errors import RenderError, UserError
+from .preview import preview_data
 from .themes import ThemeStore
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -23,6 +25,7 @@ class BrowserRenderer:
         self._launch_lock = asyncio.Lock()
         self._engine = None
         self._browser = None
+        self.failure_kind = ""
         self.themes = themes or ThemeStore()
         self._owns_themes = themes is None
         self.themes.command_entry = settings.command_entry
@@ -41,10 +44,25 @@ class BrowserRenderer:
                 executable_path=self.settings.browser_path or None,
                 headless=True,
             )
+            self.failure_kind = ""
             return self._browser
-        except Error:
+        except Error as error:
+            reason = str(error).lower()
+            self.failure_kind = (
+                "missing_dependencies"
+                if any(
+                    s in reason
+                    for s in ("missing dependencies", "shared libraries", "host system is missing")
+                )
+                else "permissions"
+                if any(s in reason for s in ("permission denied", "eacces"))
+                else "missing_browser"
+                if any(s in reason for s in ("executable doesn't exist", "doesn't exist at"))
+                else "launch_failed"
+            )
             raise RenderError(
-                "浏览器不可用。请机器人管理者在插件环境运行 python -m playwright install chromium，"
+                "浏览器不可用。请机器人管理者在 FurryCons 快速配置页检测或安装浏览器，"
+                "也可在插件环境运行 python -m playwright install chromium，"
                 "Linux 还需安装系统依赖（python -m playwright install-deps chromium）；"
                 f"或配置兼容的浏览器路径后重载。使用 /{self.settings.command_entry} 状态 检查。"
             ) from None
@@ -60,11 +78,40 @@ class BrowserRenderer:
             self.themes.close()
 
     async def status(self):
+        result = await self.probe()
+        if image := result.pop("image", None):
+            image.unlink(missing_ok=True)
+        return result["message"]
+
+    async def probe(self):
+        result = {
+            "ready": False,
+            "playwright": version("playwright"),
+            "browser_path": self.settings.browser_path or "Playwright 匹配运行时",
+        }
+        event = preview_data()["event"]
+        event.update(
+            name="中文字体与浏览器自检",
+            introduction="这是部署自检示例，不是真实展会。中文字体：山海相逢。",
+            theme_key="builtin:material",
+        )
         try:
-            await self._launch()
-            return "浏览器已启动；详情渲染使用仓库捆绑的 Noto Sans CJK SC 字体。"
-        except RenderError as exc:
-            return str(exc)
+            image = await self.detail(event)
+            result.update(
+                ready=True,
+                browser=self._browser.version,
+                image=image,
+                message="浏览器已启动；捆绑 Noto Sans CJK SC 中文字体与真实详情渲染检查通过。",
+                failure_kind="",
+            )
+        except (RenderError, UserError) as error:
+            result.update(message=str(error), failure_kind=self.failure_kind or "render_resources")
+        except (Error, OSError):
+            result.update(
+                message="浏览器检测失败，请检查运行环境、执行权限和插件资源。",
+                failure_kind="launch_failed",
+            )
+        return result
 
     async def detail(self, view):
         return await self._render("detail", {"event": view})

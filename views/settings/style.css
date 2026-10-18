@@ -11,7 +11,7 @@ header, section { margin-bottom: 20px; }
 section { border: 1px solid var(--line); border-radius: 16px; padding: 24px; background: var(--card); }
 label { display: grid; gap: 6px; margin-top: 16px; font-weight: 600; }
 label.toggle { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
-input:not([type="checkbox"]), textarea { width: 100%; background: var(--bg); color: var(--text); font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+input:not([type="checkbox"]), textarea, select { width: 100%; background: var(--bg); color: var(--text); font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 textarea { resize: vertical; }
 input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--primary); flex-shrink: 0; }
 .hint, .note { color: var(--muted); font-size: 14px; }
@@ -23,4 +23,15 @@ button:disabled { opacity: .55; cursor: wait; }
 :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 #status { padding: 14px; border-left: 4px solid var(--primary); margin: 20px 0; background: var(--card); }
 #error { padding: 14px; color: #a32020; background: #ffe9e9; border: 1px solid #c93434; border-radius: 8px; white-space: pre-wrap; }
+#browser-log { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow-y: auto; background: var(--bg); padding: 12px; border-radius: 8px; font-size: 13px; }
+#browser-error { color: #a32020; background: #ffe9e9; padding: 12px; border-radius: 8px; }
+#browser-python { overflow-wrap: anywhere; }
+#theme-preview-box { margin: 16px 0; }
+#theme-preview-image { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 8px; }
+#theme-error { color: #a32020; background: #ffe9e9; padding: 12px; border-radius: 8px; }
+#theme-defaults { white-space: pre-wrap; overflow-wrap: anywhere; }
+#theme-panel input[type="color"] { height: 48px; max-width: 240px; padding: 4px; }
+#theme-advanced { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 16px; }
+#theme-panel h3 { margin-top: 28px; }
+#theme-panel details { margin-top: 16px; }
 @media (max-width: 600px) { main { padding: 16px; } section { padding: 16px; } }

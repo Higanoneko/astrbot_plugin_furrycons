@@ -8,7 +8,9 @@
   "function_aliases": {
     "description": "直接绑定功能的顶层快捷入口",
     "type": "list",
-    "default": ["查询展会=查询"],
+    "default": [
+      "查询展会=查询"
+    ],
     "hint": "每项为 快捷入口=功能，例如 找展会=搜索、展会详情=详情、展会改色=主题改色。修改主入口不会改变功能指向；保存后重载。"
   },
   "api_base": {
@@ -89,5 +91,23 @@
     "description": "允许裸 UUID 展会 ID 查询",
     "type": "bool",
     "default": false
+  },
+  "browser_download_host": {
+    "description": "浏览器制品下载源（留空沿用环境或官方源）",
+    "type": "string",
+    "default": "",
+    "hint": "HTTPS 制品仓库地址；不保证任意第三方镜像兼容。不会改变 Linux 系统依赖软件源。"
+  },
+  "browser_download_proxy": {
+    "description": "浏览器下载代理（可选）",
+    "type": "string",
+    "default": "",
+    "hint": "HTTP(S) 代理地址，不含账号密码。留空沿用环境代理，仅用于浏览器下载。"
+  },
+  "browser_download_timeout": {
+    "description": "浏览器下载空闲超时（秒）",
+    "type": "int",
+    "default": 120,
+    "hint": "5–600 秒；下载持续接收数据时不会因为经过此时长而中止。"
   }
 }

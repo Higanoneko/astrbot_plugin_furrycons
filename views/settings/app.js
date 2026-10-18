@@ -1,3 +1,4 @@
+import { initializeThemeManager } from "./theme-manager.js";
 const bridge = window.AstrBotPluginView;
 const form = document.getElementById("settings");
 const status = document.getElementById("status");
@@ -11,9 +12,66 @@ const groups = [
   ["命令入口", ["command_entry", "function_aliases"]],
   ["裸触发开关", ["bare_numbers", "bare_names", "bare_ids"]],
   ["详情总结", ["ai_summary", "summary_provider_id", "summary_timeout"]],
-  ["浏览器参数", ["browser_path", "render_timeout"]],
+  ["浏览器参数", ["browser_path", "render_timeout", "browser_download_host", "browser_download_proxy", "browser_download_timeout"]],
 ];
 let state;
+let browserTimer;
+const runningJobs = new Set(["starting", "installing", "checking"]);
+const browserError = document.getElementById("browser-error");
+const browserProbe = document.getElementById("browser-probe");
+const browserInstall = document.getElementById("browser-install");
+const browserPreview = document.getElementById("browser-preview");
+
+function browserFailure(message = "") {
+  browserError.textContent = message;
+  browserError.hidden = !message;
+}
+
+function showBrowser(data) {
+  const labels = {idle:"尚无安装记录", starting:"准备中", installing:"安装中", checking:"渲染自检中", succeeded:"安装验证通过", failed:"失败", interrupted:"已中断", needs_configuration:"需要修正当前配置"};
+  document.getElementById("browser-job").textContent = `安装任务：${labels[data.job.state] || data.job.state}。${data.job.message}`;
+  document.getElementById("browser-log").textContent = data.job.logs.join("\n");
+  document.getElementById("browser-guidance").textContent = data.environment.guidance;
+  document.getElementById("browser-python").textContent = `宿主系统：${data.environment.system}；AstrBot Python：${data.environment.python}`;
+  browserInstall.disabled = runningJobs.has(data.job.state);
+  browserPreview.disabled = !data.preview_available;
+  if (data.probe) {
+    const result = data.probe;
+    document.getElementById("browser-result").textContent = `${result.message} Playwright ${result.playwright}；浏览器：${result.browser || "未确认"}；路径：${result.browser_path}。`;
+  } else if (data.job.active_probe) {
+    document.getElementById("browser-result").textContent = `上次安装后检测：${data.job.active_probe.message}`;
+  }
+  clearTimeout(browserTimer);
+  if (runningJobs.has(data.job.state)) browserTimer = setTimeout(readBrowser, 3000);
+}
+
+async function readBrowser() {
+  try { showBrowser(await bridge.apiGet("browser")); }
+  catch (e) { browserFailure(e.message || "无法读取安装状态，请重新打开页面。"); }
+}
+
+browserProbe.addEventListener("click", async () => {
+  browserProbe.disabled = true;
+  browserFailure();
+  document.getElementById("browser-result").textContent = "正在检测启动、系统依赖、中文字体和实际渲染…";
+  try { showBrowser(await bridge.apiPost("browser/probe", {})); }
+  catch (e) { browserFailure(e.message || "检测失败，请检查宿主运行环境。"); }
+  finally { browserProbe.disabled = false; }
+});
+
+browserInstall.addEventListener("click", async () => {
+  browserInstall.disabled = true;
+  browserFailure();
+  try { showBrowser(await bridge.apiPost("browser/install", {})); }
+  catch (e) { browserFailure(e.message || "安装任务创建失败。"); browserInstall.disabled = false; }
+});
+
+browserPreview.addEventListener("click", async () => {
+  browserFailure();
+  try { await bridge.download("browser/preview", {}, "furrycons-browser-check.png"); }
+  catch (e) { browserFailure(e.message || "下载失败，请重新检测后再试。"); }
+});
+window.addEventListener("beforeunload", () => clearTimeout(browserTimer));
 
 function showError(message) {
   error.textContent = message;
@@ -116,6 +174,7 @@ async function load() {
     if (!state) createFields(data);
     fill(data);
     form.hidden = false;
+    document.getElementById("management").hidden = false;
   } catch (e) {
     showError(e.message || "读取配置失败，请重开页面后重试。");
   } finally { setBusy(false); }
@@ -148,4 +207,6 @@ if (!bridge) {
   bridge.onContext(context => document.documentElement.dataset.theme = context.isDark ? "dark" : "light");
   document.documentElement.dataset.theme = bridge.getContext()?.isDark ? "dark" : "light";
   await load();
+  await readBrowser();
+  await initializeThemeManager(bridge);
 }

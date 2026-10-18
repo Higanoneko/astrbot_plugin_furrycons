@@ -450,6 +450,36 @@ class ThemeStore:
         self.preferences = ThemePreferences(
             Path(data_dir) / "theme_state.sqlite3" if data_dir else ":memory:"
         )
+        self._recover_update()
+
+    def _recover_update(self):
+        if self.local_dir is None:
+            return
+        journal = self.local_dir / ".pending-update.json"
+        if not journal.is_file():
+            return
+        try:
+            transaction = json.loads(journal.read_text(encoding="utf-8"))
+            identity, token = transaction["id"], transaction["token"]
+            if not IDENTIFIER.fullmatch(identity) or not re.fullmatch(r"[0-9a-f]{32}", token):
+                raise ValueError
+            destination = self.local_dir / identity
+            backup = self.local_dir / f".previous-{identity}-{token}"
+            if destination.exists():
+                if load_theme(destination, "local").manifest["id"] != identity:
+                    raise ValueError
+            elif backup.is_dir():
+                restored = load_theme(backup, "local")
+                if restored.manifest["id"] != identity:
+                    raise ValueError
+                backup.rename(destination)
+            else:
+                raise ValueError
+            journal.unlink()
+        except (OSError, ValueError, KeyError, TypeError, UserError):
+            raise UserError(
+                "本地主题更新恢复失败，请保留 .previous 备份并检查插件数据目录。"
+            ) from None
 
     def defaults(self, chat):
         global_theme, session_theme = self.preferences.default(), self.preferences.default(chat)
@@ -608,7 +638,40 @@ class ThemeStore:
                             result.append(f"{key} · 不可用，请机器人管理者检查主题包")
         return result
 
-    def import_zip(self, archive_path):
+    def catalog(self):
+        result = []
+        for item in self.installed():
+            key = item.split(" · ", 1)[0]
+            try:
+                theme = self.get(key)
+                result.append(
+                    {
+                        **theme.view(),
+                        "available": True,
+                        "author": theme.manifest["author"],
+                        "advanced": {
+                            k: v["label"] for k, v in theme.manifest["colors"]["advanced"].items()
+                        },
+                        "color_defaults": theme.manifest["colors"],
+                        "overrides": theme.overrides,
+                        "source": "内置"
+                        if key.startswith("builtin:")
+                        else "本地副本"
+                        if theme.origin
+                        else "本地导入",
+                    }
+                )
+            except UserError:
+                result.append({"key": key, "name": key, "available": False, "source": "不可用"})
+        return result
+
+    def update_zip(self, key, archive_path):
+        current = self.get(key)
+        if not current.key.startswith("local:"):
+            raise UserError("ZIP 更新仅用于明确选择的本地主题；内置主题随插件更新。")
+        return self.import_zip(archive_path, replace_key=key)
+
+    def import_zip(self, archive_path, *, replace_key=None):
         if self.local_dir is None:
             raise UserError("未配置框架插件数据目录，无法安装主题。")
         try:
@@ -645,9 +708,33 @@ class ThemeStore:
                         target.write_bytes(archive.read(item))
                 theme = load_theme(temporary, "local")
                 destination = self.local_dir / theme.manifest["id"]
-                if destination.exists():
+                if replace_key is not None:
+                    if replace_key != theme.key or not destination.is_dir():
+                        raise UserError("更新 ZIP 的标识须与选择的已安装本地主题一致。")
+                    token = uuid4().hex
+                    backup = self.local_dir / f".previous-{theme.manifest['id']}-{token}"
+                    journal = self.local_dir / ".pending-update.json"
+                    journal.write_text(
+                        json.dumps({"id": theme.manifest["id"], "token": token}), encoding="utf-8"
+                    )
+                    destination.rename(backup)
+                    try:
+                        Path(temporary).rename(destination)
+                        journal.unlink()
+                    except OSError:
+                        try:
+                            if destination.exists():
+                                destination.rename(Path(temporary))
+                            backup.rename(destination)
+                        except OSError:
+                            raise UserError(
+                                "主题更新恢复受阻，请保留 .previous 备份与更新记录，检查目录权限后重载插件。"
+                            ) from None
+                        raise
+                elif destination.exists():
                     raise UserError("该本地主题标识已存在，未覆盖；请修改包内标识以保存新副本。")
-                Path(temporary).rename(destination)
+                else:
+                    Path(temporary).rename(destination)
                 return self.get(theme.key)
         except (BadZipFile, OSError, RuntimeError, ValueError):
             raise UserError(

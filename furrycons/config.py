@@ -12,6 +12,9 @@ class Settings:
     api_key: str = field(default="", repr=False)
     timezone: str = "Asia/Shanghai"
     browser_path: str = ""
+    browser_download_host: str = ""
+    browser_download_proxy: str = ""
+    browser_download_timeout: int = 120
     render_timeout: int = 60
     page_size: int = 8
     interaction_hours: float = 24
@@ -58,6 +61,40 @@ class Settings:
             raise UserError("渲染超时须为 5–600 秒整数。")
         if not isinstance(settings.browser_path, str):
             raise UserError("浏览器位置须为路径字符串。")
+        if any(c in settings.browser_path for c in "\r\n\0"):
+            raise UserError("浏览器路径不能包含换行或空字符。")
+        for name, schemes in (
+            ("browser_download_host", ("https",)),
+            ("browser_download_proxy", ("http", "https")),
+        ):
+            address = getattr(settings, name)
+            if not isinstance(address, str):
+                raise UserError("浏览器下载源和代理须为地址字符串。")
+            if not address:
+                continue
+            try:
+                parsed = urlsplit(address)
+                invalid = (
+                    parsed.scheme not in schemes
+                    or not parsed.hostname
+                    or parsed.username is not None
+                    or parsed.query
+                    or parsed.fragment
+                    or (parsed.port is not None and parsed.port <= 0)
+                    or any(c.isspace() or ord(c) < 32 for c in address)
+                    or (name == "browser_download_proxy" and parsed.path not in ("", "/"))
+                )
+            except ValueError:
+                invalid = True
+            if invalid:
+                raise UserError(
+                    "下载源须为 HTTPS 地址，代理须为 HTTP(S) 地址；均不含账号、参数或片段。"
+                )
+        if (
+            type(settings.browser_download_timeout) is not int
+            or not 5 <= settings.browser_download_timeout <= 600
+        ):
+            raise UserError("浏览器下载空闲超时须为 5–600 秒整数。")
         if type(settings.page_size) is not int or not 1 <= settings.page_size <= 100:
             raise UserError("每页数量须为 1–100 的整数。")
         if (

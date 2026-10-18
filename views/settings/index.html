@@ -15,14 +15,62 @@
     <p id="error" role="alert" hidden></p>
     <form id="settings" hidden>
       <div id="groups"></div>
-      <section><h2>管理能力</h2>
-        <p>浏览器部署：页面管理开发中。当前可在插件配置填写浏览器路径，聊天输入“主入口 状态”检查运行环境。</p>
-        <p>主题管理：页面管理开发中。当前可使用主题列表、默认、改色、导入及副本命令。</p>
-        <p>主题商店计划于 P3 提供。</p>
-      </section>
       <div class="actions"><button id="save" type="submit">保存配置</button><button id="refresh" type="button" class="secondary">重新读取</button></div>
       <p class="note">此页面使用已认证的 Dashboard 管理权限；聊天中的管理操作仍要求 AstrBot 机器人管理员，群主或频道管理员身份不会自动授权。</p>
     </form>
+    <div id="management" hidden>
+      <section id="browser-panel">
+        <h2>浏览器检测与部署</h2>
+        <p>下载源、代理与超时先保存，再主动发起安装。下载参数立即供安装任务使用；浏览器路径和渲染参数需重载后用于聊天。</p>
+        <p>优先安装当前 Playwright 版本匹配的 Chromium。不会自动安装 Linux 系统软件包；权限不足或缺少共享库时请按下方指引处理。</p>
+        <div class="actions">
+          <button id="browser-probe" type="button">检测当前浏览器</button>
+          <button id="browser-install" type="button" class="secondary">安装匹配 Chromium</button>
+          <button id="browser-preview" type="button" class="secondary" disabled>下载中文自检图</button>
+        </div>
+        <p id="browser-result" role="status" aria-live="polite">尚未检测。</p>
+        <p id="browser-job" role="status" aria-live="polite">读取安装任务中…</p>
+        <p id="browser-error" role="alert" hidden></p>
+        <pre id="browser-log" aria-label="安装进度与诊断日志"></pre>
+        <p id="browser-guidance" class="note"></p>
+        <p id="browser-python" class="note"></p>
+      </section>
+      <section id="theme-panel">
+        <h2>主题管理</h2>
+        <p>预览使用示例展会与已安装主题的真实模板。主题设置立即影响后续查询；安装和另存副本不会自动切换默认值。</p>
+        <label for="theme-select">已安装主题<select id="theme-select"></select></label>
+        <p id="theme-info" class="note"></p>
+        <p id="theme-result" role="status" aria-live="polite"></p>
+        <p id="theme-error" role="alert" hidden></p>
+        <div class="actions">
+          <button id="theme-refresh" type="button" class="secondary">刷新主题</button>
+          <button id="theme-preview-list" type="button">预览列表图</button>
+          <button id="theme-preview-detail" type="button" class="secondary">预览详情图</button>
+          <button id="theme-export" type="button" class="secondary">导出主题 ZIP</button>
+        </div>
+        <figure id="theme-preview-box" hidden><figcaption id="theme-preview-caption"></figcaption><img id="theme-preview-image" alt="主题示例预览"></figure>
+        <h3>独立配色</h3>
+        <label for="theme-primary">主色<input id="theme-primary" type="color"></label>
+        <label for="theme-mode">明暗<select id="theme-mode"><option value="light">浅色</option><option value="dark">深色</option></select></label>
+        <details><summary>高级颜色（仅主题声明的项目）</summary><div id="theme-advanced"></div></details>
+        <div class="actions"><button id="theme-colors" type="button">保存配色</button><button id="theme-reset" type="button" class="secondary">重置配色</button></div>
+        <h3>默认主题</h3>
+        <p id="theme-defaults" class="note"></p>
+        <label for="theme-scope">设置范围<select id="theme-scope"><option value="global">全局</option><option value="session">指定群、频道或私聊</option></select></label>
+        <label for="theme-chat">会话标识<input id="theme-chat" list="theme-chats" placeholder="选择已查询过的会话，或填写完整标识" disabled></label>
+        <datalist id="theme-chats"></datalist>
+        <p class="hint">会话标识由平台实例、消息类型、会话 ID 组成。优先从已有查询记录选择，避免设置到其他接入或会话。</p>
+        <div class="actions"><button id="theme-default" type="button">将所选主题设为默认</button><button id="theme-clear" type="button" class="secondary">清除此范围默认值</button></div>
+        <h3>本地主题包</h3>
+        <label for="theme-file">主题 ZIP（最多 32 MiB）<input id="theme-file" type="file" accept=".zip,application/zip"></label>
+        <p class="hint">导入新主题不能覆盖已有标识；更新仅替换所选 local: 主题，包内标识须一致。更新保留独立配色、默认值与旧包备份。</p>
+        <div class="actions"><button id="theme-import" type="button">导入新主题</button><button id="theme-update" type="button" class="secondary">更新所选本地主题</button></div>
+        <label for="theme-copy-id">新副本标识<input id="theme-copy-id" placeholder="如 my-glass，小写字母开头"></label>
+        <label for="theme-copy-name">副本名称（可选）<input id="theme-copy-name"></label>
+        <div class="actions"><button id="theme-copy" type="button" class="secondary">另存布局与配色副本</button></div>
+        <p class="note">布局、字号和间距通过导出 ZIP 编辑；主题商店、在线安装与在线更新计划于 P3 提供。</p>
+      </section>
+    </div>
   </main>
   <script type="module" src="./app.js"></script>
 </body>

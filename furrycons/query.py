@@ -195,6 +195,14 @@ class SnapshotStore:
     def close(self):
         self.connection.close()
 
+    def chats(self):
+        return [
+            row[0]
+            for row in self.connection.execute(
+                "SELECT chat FROM snapshots GROUP BY chat ORDER BY MAX(created) DESC LIMIT 200"
+            )
+        ]
+
     def latest(self, chat, user, now):
         row = self.connection.execute(
             "SELECT code FROM snapshots WHERE chat = ? AND user = ? ORDER BY created DESC, rowid DESC LIMIT 1",

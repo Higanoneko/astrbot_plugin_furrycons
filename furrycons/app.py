@@ -9,6 +9,7 @@ from .commands import CommandRoutes
 from .delivery import deliver
 from .errors import UserError
 from .outputs import OutputStore
+from .preview import preview_data
 from .query import SnapshotStore, default_query, is_undated, name_query, query_options
 from .summary import introduction_summary
 from .themes import ThemeStore
@@ -106,6 +107,11 @@ class Application:
                 )
             if args == ["主题列表"]:
                 return Reply(text="已安装主题：\n" + "\n".join(self.themes.installed()))
+            if len(args) == 2 and args[0] == "主题更新":
+                theme = await self.manage_theme(
+                    "update", key=args[1], path=attachment, is_admin=is_admin
+                )
+                return Reply(text=f"已更新 {theme.key}；默认值与独立配色保留，旧包已备份。")
             if len(args) == 2 and args[0] == "主题配色":
                 theme = await self.manage_theme("palette", key=args[1])
                 return Reply(
@@ -347,6 +353,8 @@ class Application:
             return self.themes.get(options.get("key")).view()
         if action == "list":
             return self.themes.installed()
+        if action == "catalog":
+            return self.themes.catalog()
         if not is_admin:
             raise UserError("仅机器人管理员可以修改主题；群主或频道管理员身份不授予此权限。")
         if action == "set_default":
@@ -362,6 +370,18 @@ class Application:
                     f"请上传主题 ZIP 并回复 {self.entry} 主题导入；此接入须能提供引用文件内容，也可通过 WebUI 导入。"
                 )
             return self.themes.import_zip(options["path"])
+        if action == "update":
+            if not options.get("path"):
+                raise UserError("请上传本地主题 ZIP，并明确指定要更新的 local: 标识。")
+            return self.themes.update_zip(options.get("key"), options["path"])
+        if action == "preview":
+            key = self.themes.get(options.get("key")).key
+            data = preview_data(key, self.settings.command_entry)
+            if options.get("kind") == "list":
+                return await self.renderer.listing(data["query"])
+            if options.get("kind") == "detail":
+                return await self.renderer.detail(data["event"])
+            raise UserError("主题预览类型须为 list 或 detail。")
         if action == "set_colors":
             return self.themes.set_colors(options.get("key"), options.get("changes"))
         if action == "reset_colors":
