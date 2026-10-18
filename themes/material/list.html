@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><style>
 @font-face {font-family:FurryCons;src:url('https://furrycons.invalid/font.otf')}
-* {box-sizing:border-box} body {margin:0;padding:40px;background:#f4f6fc;color:#1b2436;font-family:FurryCons,sans-serif;font-size:23px;line-height:1.6;overflow-wrap:anywhere}
-.brand {color:#405f91;font-size:20px;letter-spacing:2px} h1 {font-size:43px;margin:16px 0} .meta {font-size:20px;color:#576478} .card {margin-top:18px;padding:22px 28px;background:white;border-radius:24px} h2 {font-size:29px;margin:0 0 8px}.tag {display:inline-block;background:#d7e4ff;color:#244777;border-radius:24px;padding:3px 14px;font-size:18px}.note{color:#9c5200}.id{color:#576478;font-size:16px}footer {margin-top:26px;font-size:19px;color:#576478}
+* {box-sizing:border-box} body {margin:0;padding:40px;background:{{ theme.colors.background }};color:{{ theme.colors.text }};font-family:FurryCons,sans-serif;font-size:23px;line-height:1.6;overflow-wrap:anywhere}
+.brand {color:{{ theme.colors.primary }};font-size:20px;letter-spacing:2px} h1 {font-size:43px;margin:16px 0} .meta {font-size:20px;color:{{ theme.colors.muted }}} .card {margin-top:18px;padding:22px 28px;background:{{ theme.colors.surface }};border-radius:24px} h2 {font-size:29px;margin:0 0 8px}.tag {display:inline-block;background:{{ theme.colors.tag }};color:{{ theme.colors.tag_text }};border-radius:24px;padding:3px 14px;font-size:18px}.note{color:{{ theme.colors.note }}}.id{color:{{ theme.colors.muted }};font-size:16px}footer {margin-top:26px;font-size:19px;color:{{ theme.colors.muted }}}
 </style></head><body>
 <div class="brand">FURRYCONS · 展会日历</div><h1>展会查询</h1>
 <div class="meta">{{ query.range }}<br>查询短码 {{ query.code }} · 第 {{ query.page }}/{{ query.pages }} 页 · 共 {{ query.total }} 场</div>

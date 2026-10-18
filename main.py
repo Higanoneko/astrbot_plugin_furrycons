@@ -12,6 +12,7 @@ from .furrycons.query import SnapshotStore
 from .furrycons.render import BrowserRenderer
 from .furrycons.source import FurryConsSource
 from .furrycons.summary import AstrBotSummaryModel
+from .furrycons.themes import ThemeStore
 
 
 class AstrBotTransport:
@@ -35,14 +36,16 @@ class FurryConsPlugin(Star):
         super().__init__(context)
         settings = Settings.from_dict(dict(config))
         data_dir = StarTools.get_data_dir("astrbot_plugin_furrycons")
+        themes = ThemeStore(data_dir)
         self.app = Application(
             settings,
             FurryConsSource(settings),
-            BrowserRenderer(settings, data_dir / "images"),
+            BrowserRenderer(settings, data_dir / "images", themes),
             snapshots=SnapshotStore(data_dir / "state.sqlite3"),
             cache=CatalogCache(data_dir / "cache.sqlite3"),
             model=AstrBotSummaryModel(context),
             outputs=OutputStore(data_dir / "outputs.sqlite3", data_dir / "images"),
+            themes=themes,
         )
 
     @filter.command("FEC")
@@ -106,8 +109,28 @@ class FurryConsPlugin(Star):
 
     async def _respond(self, event, command):
         chat = self._chat(event)
+        attachment = None
+        if command.strip() == "主题导入" and event.is_admin():
+            quotes = [m for m in event.get_messages() if isinstance(m, QuotedMessage)]
+            components = (
+                quotes[0].chain if len(quotes) == 1 else event.get_messages() if not quotes else []
+            )
+            files = [m for m in (components or []) if isinstance(m, File)]
+            if len(files) == 1 and (files[0].name or "").lower().endswith(".zip"):
+                try:
+                    attachment = await files[0].get_file()
+                except Exception:  # noqa: BLE001 - platform download errors
+                    yield event.plain_result(
+                        "无法获取主题 ZIP，请重新上传并回复导入，或使用 WebUI 导入。"
+                    )
+                    return
         reply = await self.app.execute(
-            command, chat=chat, user=event.get_sender_id(), quote_id=self._quote_id(event)
+            command,
+            chat=chat,
+            user=event.get_sender_id(),
+            quote_id=self._quote_id(event),
+            is_admin=event.is_admin(),
+            attachment=attachment,
         )
         async for result in self._send_reply(event, reply):
             yield result

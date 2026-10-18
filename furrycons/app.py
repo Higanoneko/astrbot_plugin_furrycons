@@ -10,6 +10,7 @@ from .errors import UserError
 from .outputs import OutputStore
 from .query import SnapshotStore, default_query, is_undated, name_query, query_options
 from .summary import introduction_summary
+from .themes import ThemeStore
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class Application:
         cache=None,
         model=None,
         outputs=None,
+        themes=None,
     ):
         self.settings, self.source, self.renderer = settings, source, renderer
         self.clock = clock or (lambda: datetime.now(UTC))
@@ -43,10 +45,27 @@ class Application:
         self.cache = cache or CatalogCache()
         self.model = model
         self.outputs = outputs or OutputStore()
+        self.themes = themes or ThemeStore()
 
-    async def execute(self, command: str, *, chat="local", user="local", quote_id=None):
+    async def execute(
+        self,
+        command: str,
+        *,
+        chat="local",
+        user="local",
+        quote_id=None,
+        is_admin=False,
+        attachment=None,
+    ):
         try:
-            reply = await self._execute(command, chat=chat, user=user, quote_id=quote_id)
+            reply = await self._execute(
+                command,
+                chat=chat,
+                user=user,
+                quote_id=quote_id,
+                is_admin=is_admin,
+                attachment=attachment,
+            )
             if reply.image and reply.output_code is None:
                 code = self.outputs.register(
                     reply.image, chat, self.clock(), self.settings.interaction_hours * 3600
@@ -60,21 +79,47 @@ class Application:
         except UserError as exc:
             return Reply(text=str(exc))
 
-    async def _execute(self, command: str, *, chat, user, quote_id):
+    async def _execute(self, command: str, *, chat, user, quote_id, is_admin, attachment):
         args = command.strip().split()
         single = "--single" in args
         args = [arg for arg in args if arg != "--single"]
         try:
+            if args == ["主题导入"]:
+                if not is_admin:
+                    raise UserError(
+                        "仅机器人管理员可以导入主题；群主或频道管理员身份不授予此权限。"
+                    )
+                if attachment is None:
+                    raise UserError(
+                        "请上传主题 ZIP 并回复 /FEC 主题导入；此接入须能提供引用文件内容，也可通过 WebUI 导入。"
+                    )
+                theme = self.themes.import_zip(attachment)
+                return Reply(
+                    text=f"已安装 {theme.key} · {theme.manifest['name']}。默认主题未改变；单次使用：--theme {theme.key}"
+                )
+            if args == ["主题列表"]:
+                return Reply(text="已安装主题：\n" + "\n".join(self.themes.installed()))
+            theme_key = "builtin:material"
+            if "--theme" in args:
+                index = args.index("--theme")
+                if args.count("--theme") != 1 or index + 1 >= len(args):
+                    raise UserError(
+                        "单次主题用法：--theme <已安装主题标识>；可用 /FEC 主题列表 查看。"
+                    )
+                theme_key = self.themes.get(args[index + 1]).key
+                args = args[:index] + args[index + 2 :]
             if quote_id is not None and (
                 (len(args) == 1 and (args[0].isdigit() or args[0] in ("下一页", "上一页")))
                 or (len(args) == 2 and args[0] in ("选择", "翻页"))
             ):
                 snapshot, page = self.snapshots.referenced(chat, str(quote_id), self.clock())
                 if args[0] in ("下一页", "上一页"):
-                    return await self._page(snapshot, page + (1 if args[0] == "下一页" else -1))
+                    return await self._page(
+                        snapshot, page + (1 if args[0] == "下一页" else -1), theme_key=theme_key
+                    )
                 action, number = ("选择", args[0]) if len(args) == 1 else args
                 return await self.execute(
-                    f"{action} {snapshot.code} {number}", chat=chat, user=user
+                    f"{action} {snapshot.code} {number} --theme {theme_key}", chat=chat, user=user
                 )
             if args == ["状态"]:
                 return Reply(text=await self.renderer.status())
@@ -87,7 +132,7 @@ class Application:
                     catalog, self.clock(), self.settings.timezone, args[1:]
                 )
                 return await self._query_reply(
-                    events, label + " · " + note, chat, user, single=single
+                    events, label + " · " + note, chat, user, single=single, theme_key=theme_key
                 )
             if args and args[0] == "搜索":
                 if len(args) < 2:
@@ -95,16 +140,16 @@ class Application:
                 catalog, note = await self.cache.load(self.source, self.settings, self.clock)
                 events, label = name_query(catalog, " ".join(args[1:]))
                 return await self._query_reply(
-                    events, label + " · " + note, chat, user, single=single
+                    events, label + " · " + note, chat, user, single=single, theme_key=theme_key
                 )
             if len(args) == 2 and args[0] == "单图":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
-                return await self._page(snapshot, 1, all_results=True)
+                return await self._page(snapshot, 1, all_results=True, theme_key=theme_key)
             if len(args) == 3 and args[0] == "翻页":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
                 if len(args[2]) > 9 or not args[2].isascii() or not args[2].isdigit():
                     raise UserError("页码须为正整数。用法：/FEC 翻页 <短码> <页码>。")
-                return await self._page(snapshot, int(args[2]))
+                return await self._page(snapshot, int(args[2]), theme_key=theme_key)
             if len(args) == 3 and args[0] == "选择":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
                 if len(args[2]) > 9 or not args[2].isascii() or not args[2].isdigit():
@@ -112,9 +157,9 @@ class Application:
                 index = int(args[2])
                 if not 1 <= index <= len(snapshot.events):
                     raise UserError(f"选择序号超出范围，请使用 1–{len(snapshot.events)}。")
-                return await self._detail(snapshot.events[index - 1].id)
+                return await self._detail(snapshot.events[index - 1].id, theme_key)
             if len(args) == 2 and args[0] == "详情":
-                return await self._detail(args[1])
+                return await self._detail(args[1], theme_key)
             return Reply(
                 text="用法：/FEC 查询；/FEC 搜索 <名称>；/FEC 翻页 <短码> <页码>；"
                 "/FEC 选择 <短码> <序号>；/FEC 详情 <ID>；/FEC 原图 <输出码>；/FEC 状态。"
@@ -122,9 +167,10 @@ class Application:
         except UserError as exc:
             return Reply(text=str(exc))
 
-    async def _detail(self, identity):
+    async def _detail(self, identity, theme_key):
         convention = await self.source.detail(identity)
         view = convention.detail_view(self.settings.timezone)
+        view["theme_key"] = theme_key
         summary = await introduction_summary(convention.description, self.settings, self.model)
         if summary is not None:
             view["introduction"] = summary
@@ -155,7 +201,7 @@ class Application:
             return await self.execute("搜索 " + text, chat=chat, user=user)
         return Reply()
 
-    async def _query_reply(self, events, label, chat, user, *, single=False):
+    async def _query_reply(self, events, label, chat, user, *, single=False, theme_key):
         if not events:
             return Reply(text=f"查询范围：{label}。没有符合条件的展会。数据来源：FurryCons。")
         snapshot = self.snapshots.create(
@@ -168,9 +214,9 @@ class Application:
             self.settings.interaction_hours * 3600,
             self.settings.timezone,
         )
-        return await self._page(snapshot, 1, all_results=single)
+        return await self._page(snapshot, 1, all_results=single, theme_key=theme_key)
 
-    async def _page(self, snapshot, page, *, all_results=False):
+    async def _page(self, snapshot, page, *, all_results=False, theme_key="builtin:material"):
         page_size = len(snapshot.events) if all_results else snapshot.page_size
         pages = ceil(len(snapshot.events) / page_size)
         if not 1 <= page <= pages:
@@ -186,6 +232,7 @@ class Application:
                 view["schedule_note"] = ""
             events.append(view)
         data = {
+            "theme_key": theme_key,
             "events": events,
             "range": ("全部结果单图 · " if all_results else "") + snapshot.label,
             "code": snapshot.code,
