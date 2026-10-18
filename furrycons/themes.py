@@ -711,12 +711,15 @@ class ThemeStore:
                 if replace_key is not None:
                     if replace_key != theme.key or not destination.is_dir():
                         raise UserError("更新 ZIP 的标识须与选择的已安装本地主题一致。")
+                    self._recover_update()
                     token = uuid4().hex
                     backup = self.local_dir / f".previous-{theme.manifest['id']}-{token}"
                     journal = self.local_dir / ".pending-update.json"
-                    journal.write_text(
+                    staged_journal = self.local_dir / ".pending-update.tmp"
+                    staged_journal.write_text(
                         json.dumps({"id": theme.manifest["id"], "token": token}), encoding="utf-8"
                     )
+                    staged_journal.replace(journal)
                     destination.rename(backup)
                     try:
                         Path(temporary).rename(destination)

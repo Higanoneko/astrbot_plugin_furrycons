@@ -132,6 +132,31 @@ def test_interrupted_directory_swap_recovers_exact_local_identity(tmp_path):
     restored.close()
 
 
+async def test_interrupted_journal_write_leaves_old_theme_loadable(tmp_path, monkeypatch):
+    app = themed_app(tmp_path)
+    try:
+        await app.manage_theme("import", is_admin=True, path=theme_zip(tmp_path))
+        update = theme_zip(tmp_path, manifest_changes={"version": "1.1.0"})
+        original = Path.write_text
+
+        def interrupted(path, data, *args, **kwargs):
+            if path.name in (".pending-update.json", ".pending-update.tmp"):
+                original(path, '{"id":', encoding="utf-8")
+                raise OSError("fixture interrupted write")
+            return original(path, data, *args, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "write_text", interrupted)
+            with pytest.raises(UserError, match="原有主题保持可用"):
+                await app.manage_theme("update", key="local:custom", path=update, is_admin=True)
+        assert not (app.themes.local_dir / ".pending-update.json").exists()
+    finally:
+        await app.close()
+    restored = ThemeStore(tmp_path)
+    assert restored.get("local:custom").manifest["version"] == "1.0.0"
+    restored.close()
+
+
 async def test_structured_catalog_and_preview_share_chat_theme_decisions(tmp_path):
     app = themed_app(tmp_path)
     try:

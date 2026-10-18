@@ -73,6 +73,18 @@ AI 总结默认关闭。机器人管理者可在插件配置启用并选择 Astr
 
 ## 开发和验收
 
+升级前可备份 `data/config/astrbot_plugin_furrycons_config.json` 和 `data/plugin_data/astrbot_plugin_furrycons/`。使用 AstrBot 插件页更新代码；用户主题、配色、默认值、缓存、快照和图片存放在后者中，请保留该数据目录。已在 AstrBot 4.29.1 的实际 ZIP 替换安装中验证这些数据及有效原文件引用保留，过期短码不会因升级延长有效期。更新或重载会中断正在进行的浏览器安装，请完成后重新检测。
+
+| 接入 | 当前证据与限制 |
+| --- | --- |
+| AstrBot WebChat | 已验证查询、翻页、选择、图片、原文件字节一致及插件更新后短码恢复。 |
+| NapCat / OneBot | 已接入 AstrBot 通用消息与 aiocqhttp 文件路径；真实群聊/私聊收发、引用、附件和长图接收待维护者验收。 |
+| QQ 官方 | 已接入通用图片与短码命令；真实适用会话、引用回执及长图接收待验收，暂不声明附件能力。 |
+| Telegram | 已接入通用消息及文件路径；真实群聊/频道/私聊、引用、附件和长图接收待维护者验收。 |
+| Discord | P2。 |
+
+两套主题的浅深色长列表和长介绍已在 Chromium 实际渲染并查看；本地生成成功不代表外部聊天平台能接收相同长度。主题 WebUI 的真实接口上传更新已验证，页面文件选择上传尚待专项核对；Linux 缺共享库分支及完整冷下载也未全部验收，不据此宣称所有部署环境可用。
+
 `uv sync` 后执行 `uv run python -m pytest -q`，可用 `uv run ruff check furrycons main.py tests scripts` 检查代码。
 
 执行 `python scripts/build_plugin.py` 可生成 `dist/astrbot_plugin_furrycons.zip`。安装包仅包含插件代码、配置声明、主题和资源，不含开发凭据、本地运行数据或验收产物。生成目录不进入版本控制。
