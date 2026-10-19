@@ -1,12 +1,14 @@
 # FurryCons 展会图片插件
 
-面向 AstrBot 的 FurryCons 展会图片查询插件。已提供详情、默认/日期/省市查询、名称搜索、稳定分页、持久查询短码、缓存、全部结果单图、可配置裸交互、原文件入口、两套内置主题、本地 ZIP 导入更新、会话主题、独立改色、可选 AI 总结及 WebUI 管理。**开发中，尚未完成首版全部验收。**列表配图与三种可切换排版、Discord 计划在 P2 完成，主题商店计划在 P3 落地。QQ/Telegram 真实收发验收按维护者安排暂缓。
+面向 AstrBot 的 FurryCons 展会图片查询插件。已提供详情、默认/日期/省市查询、名称搜索、稳定分页、持久查询短码、缓存、全部结果单图、可配置裸交互、原文件入口、两套内置主题、本地 ZIP 导入更新、会话主题、独立改色、可选 AI 总结及 WebUI 管理。NapCat / OneBot 实际收发已获维护者确认，QQ 官方与 Telegram 实际收发验收按维护者安排暂缓。列表配图与三种可切换排版、Discord 计划在 P2 完成，主题商店计划在 P3 落地。
 
 ## 当前安装与使用
 
 将本目录作为 AstrBot 插件安装，保留 `furrycons/`、`themes/`、`assets/` 和配置文件。最低支持 AstrBot 4.29.1，已验证该版本和 Python 3.14.7；项目代码要求 Python 3.12 及以上。
 
-在 AstrBot 使用的 Python 环境安装 `requirements.txt`，运行 `python -m playwright install chromium`。Linux 的系统依赖通过 `python -m playwright install-deps chromium` 安装，权限不足时由宿主管理员处理。也可在插件配置填写现有兼容 Chromium 的完整路径。
+通过 AstrBot 插件页安装时，由 AstrBot 按 `requirements.txt` 安装 Python 依赖。若安装或加载失败，请附 AstrBot/Python 版本和脱敏错误日志[提交 issue](https://github.com/Higanoneko/astrbot_plugin_furrycons/issues)。
+
+安装后先在快速配置页检测浏览器；已有兼容浏览器且自检通过时即可使用。缺少浏览器时可点击“安装匹配 Chromium”，或在 AstrBot 使用的 Python 环境运行 `python -m playwright install chromium`。Linux 缺少系统依赖时按诊断指引运行 `python -m playwright install-deps chromium`，权限不足时由宿主管理员处理。也可在插件配置填写现有兼容 Chromium 的完整路径。
 
 在 AstrBot 插件配置中填写 FurryCons 工作台提供的 API Key，Authorization 使用原值。数据源默认 `https://api.furrycons.cn/open`，显示时区默认 `Asia/Shanghai`。保存后重载插件。
 
@@ -78,18 +80,18 @@ AI 总结默认关闭。机器人管理者可在插件配置启用并选择 Astr
 | 接入 | 当前证据与限制 |
 | --- | --- |
 | AstrBot WebChat | 已验证查询、翻页、选择、图片、原文件字节一致及插件更新后短码恢复。 |
-| NapCat / OneBot | 已接入 AstrBot 通用消息与 aiocqhttp 文件路径；真实群聊/私聊收发、引用、附件和长图接收待维护者验收。 |
+| NapCat / OneBot | 维护者于 2026-10-19 确认实际收发通过。具体版本、会话类型、引用关联、附件、超长图和重启恢复专项尚未提供逐项结果，不外推为全部通过。 |
 | QQ 官方 | 已接入通用图片与短码命令；真实适用会话、引用回执及长图接收待验收，暂不声明附件能力。 |
 | Telegram | 已接入通用消息及文件路径；真实群聊/频道/私聊、引用、附件和长图接收待维护者验收。 |
 | Discord | P2。 |
 
-两套主题的浅深色长列表和长介绍已在 Chromium 实际渲染并查看；本地生成成功不代表外部聊天平台能接收相同长度。主题 WebUI 的真实接口上传更新已验证，页面文件选择上传尚待专项核对；Linux 缺共享库分支及完整冷下载也未全部验收，不据此宣称所有部署环境可用。
+两套主题的浅深色长列表和长介绍已在 Chromium 实际渲染并查看；本地生成成功不代表外部聊天平台能接收相同长度。主题 WebUI 的真实接口导入更新已验证；部署页面 ZIP 导入后，两类模板预览通过，安装没有改变默认主题。完整冷下载及 Linux 缺共享库专项未全部通过，按维护者决定不作为当前交付门槛；保留诊断和故障指引，实际环境问题通过 issue 跟进。
 
 `uv sync` 后执行 `uv run python -m pytest -q`，可用 `uv run ruff check furrycons main.py tests scripts` 检查代码。
 
 执行 `python scripts/build_plugin.py` 可生成 `dist/astrbot_plugin_furrycons.zip`。安装包仅包含插件代码、配置声明、主题和资源，不含开发凭据、本地运行数据或验收产物。生成目录不进入版本控制。
 
-自动化测试使用可控的外部 API、收发及渲染边界；本地真实浏览器与 AstrBot WebChat 已进行初步验证，QQ、Telegram 等外部平台能力仍待专项验收。
+自动化测试使用可控的外部 API、收发及渲染边界；真实浏览器与 AstrBot WebChat 已有集成证据。NapCat / OneBot 实际收发由维护者确认，其余外部平台及未提供结果的专项保留待验证。
 
 字体来自 [Noto CJK 官方仓库](https://github.com/notofonts/noto-cjk)，按随附 SIL Open Font License 分发。
 
