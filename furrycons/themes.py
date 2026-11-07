@@ -19,7 +19,7 @@ from .errors import UserError
 from .theme_state import ThemePreferences
 
 BUILTINS = Path(__file__).resolve().parent.parent / "themes"
-PLUGIN_VERSION = (0, 2, 12)
+PLUGIN_VERSION = (0, 2, 14)
 IDENTIFIER = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 COLOR = re.compile(r"#[0-9a-fA-F]{6}\Z")
 ALLOWED_SUFFIXES = {
@@ -118,7 +118,7 @@ def _manifest(value):
         _version(compatibility["plugin_max_exclusive"]),
     )
     if not lower <= PLUGIN_VERSION < upper:
-        raise UserError("主题兼容区间不包含当前插件 0.2.12，未安装。")
+        raise UserError("主题兼容区间不包含当前插件 0.2.14，未安装。")
     layouts = value.get("layouts", [])
     if (
         not isinstance(layouts, list)
