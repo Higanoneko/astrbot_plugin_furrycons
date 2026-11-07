@@ -17,7 +17,6 @@ async def deliver(reply, transport, on_image_receipt):
     if reply.image:
         try:
             receipt = await transport.send_image(reply.image)
-            on_image_receipt(receipt)
         except Exception:  # noqa: BLE001
             if transport.can_send_files:
                 try:
@@ -30,6 +29,18 @@ async def deliver(reply, transport, on_image_receipt):
             else:
                 messages.append(
                     "图片已生成，但图片发送失败；当前接入未声明附件能力，请联系机器人管理者。"
+                )
+        else:
+            try:
+                on_image_receipt(receipt)
+            except Exception:  # noqa: BLE001 - persistence failures are not send failures
+                messages.append(
+                    "图片已向平台提交，但引用关联暂不可用。"
+                    + (
+                        f"请使用查询短码 {reply.query_code}，按本条消息附带的命令选择或翻页。"
+                        if reply.query_code
+                        else "请使用本条消息附带的原图命令获取原文件。"
+                    )
                 )
     if reply.text:
         messages.append(reply.text)

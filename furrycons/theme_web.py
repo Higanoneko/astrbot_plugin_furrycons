@@ -88,7 +88,12 @@ class ThemeWeb:
         image = None
         try:
             payload = await request.json(default=None)
-            if not isinstance(payload, dict) or set(payload) != {"key", "kind"}:
+            if (
+                not isinstance(payload, dict)
+                or not {"key", "kind"} <= set(payload)
+                or set(payload) - {"key", "kind", "layout"}
+                or ("layout" in payload and payload["layout"] not in ("compact", "poster", "grid"))
+            ):
                 raise UserError("预览须指定主题及 list/detail 类型。")
             image = await self.app.manage_theme("preview", is_admin=True, **payload)
             if image.stat().st_size > 8 * 1024 * 1024:

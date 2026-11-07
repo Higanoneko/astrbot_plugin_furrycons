@@ -1,0 +1,20 @@
+/* The event's existing poster becomes a soft, full-page field of color.
+   It is decorative; the card poster keeps its height-driven natural ratio. */
+.detail-page.has-poster-atmosphere{position:relative;isolation:isolate;background-image:none}
+.detail-atmosphere{position:absolute;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:var(--background)}
+.atmosphere-base,.atmosphere-refraction>img{position:absolute;inset:-110px;width:calc(100% + 220px);height:calc(100% + 220px);object-fit:fill}
+.atmosphere-base{filter:blur(96px) saturate(155%);opacity:.82}
+.atmosphere-refraction{position:absolute;inset:0;opacity:.42;mask-image:radial-gradient(ellipse at 66% 46%,transparent 12%,#000c 36%,transparent 72%)}
+.atmosphere-refraction>img{filter:blur(64px) saturate(145%);transform:translate(24px,-16px) scale(1.08)}
+.atmosphere-flow{position:absolute;inset:0;background:linear-gradient(118deg,transparent 18%,#ffffff20 39%,transparent 57%),radial-gradient(ellipse at 12% 60%,#ffffff18,transparent 52%);pointer-events:none}
+.detail-atmosphere::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,color-mix(in srgb,var(--background) 92%,transparent),color-mix(in srgb,var(--background) 12%,transparent) 24%,color-mix(in srgb,var(--background) 6%,transparent) 65%,color-mix(in srgb,var(--background) 6%,transparent) 84%,color-mix(in srgb,var(--background) 94%,transparent) 92%,color-mix(in srgb,var(--background) 94%,transparent))}
+.has-poster-atmosphere :is(.introduction-panel,.source-panel){isolation:isolate;position:relative;overflow:hidden;background:linear-gradient(135deg,color-mix(in srgb,var(--surface) 78%,transparent),color-mix(in srgb,var(--surface) 64%,transparent));border:1px solid color-mix(in srgb,var(--outline) 38%,transparent);box-shadow:0 7px 22px color-mix(in srgb,var(--text) 6%,transparent)}
+.has-poster-atmosphere :is(.introduction-panel,.source-panel)::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:1;pointer-events:none;backdrop-filter:blur(24px) saturate(135%);background:linear-gradient(125deg,color-mix(in srgb,var(--outline) 16%,transparent),transparent 45%,color-mix(in srgb,var(--primary) 5%,transparent))}
+.has-poster-atmosphere :is(.introduction-panel,.source-panel)::after{display:none}
+.has-poster-atmosphere :is(.introduction-panel,.source-panel)>*{position:relative;z-index:3}
+html[data-mode=dark] .atmosphere-base{opacity:.68}
+html[data-mode=dark] .atmosphere-refraction{opacity:.34}
+html[data-mode=dark] .atmosphere-flow{opacity:.6}
+html[data-mode=dark] .has-poster-atmosphere :is(.introduction-panel,.source-panel){background:linear-gradient(135deg,color-mix(in srgb,var(--surface) 74%,transparent),color-mix(in srgb,var(--surface) 60%,transparent));box-shadow:0 8px 24px #0002}
+/* Keep long-image text painted; the large color fields and glass edges remain. */
+html.long-image .has-poster-atmosphere :is(.introduction-panel,.source-panel)::before{backdrop-filter:none!important}

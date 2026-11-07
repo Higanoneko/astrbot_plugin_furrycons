@@ -9,13 +9,27 @@
 <body>
   <main>
     <header><p class="eyebrow">FurryCons</p><h1>快速配置</h1>
-      <p>配置展会查询与聊天交互。保存后，请回到插件管理页重载插件。</p>
+      <p>连接展会资料，选择图片样式，让聊天里的每一次查询都更轻松。</p>
     </header>
+    <section class="setup-guide" aria-labelledby="setup-title">
+      <h2 id="setup-title">第一次使用</h2>
+      <ol>
+        <li><a href="#settings">连接数据源</a><span>填写 API Key，保存后重载插件。</span></li>
+        <li><a href="#browser-panel">检测浏览器</a><span>确认可以生成中文图片。</span></li>
+        <li><a href="#theme-panel">预览喜欢的主题</a><span>回到聊天，发送 <code id="start-command">/FEC 查询</code>。</span></li>
+      </ol>
+    </section>
+    <div id="page-tools">
+      <nav aria-label="快速配置分区">
+        <a href="#settings">查询设置</a><a href="#browser-panel">浏览器</a><a href="#theme-panel">主题外观</a>
+      </nav>
+      <div class="actions"><button id="save" type="submit" form="settings" disabled>保存配置</button><button id="refresh" type="button" class="secondary">重新读取</button></div>
+    </div>
     <p id="status" role="status" aria-live="polite">正在连接 AstrBot…</p>
+    <div id="settings-draft-actions" class="actions" hidden><button id="discard-settings" type="button" class="secondary" hidden>放弃草稿并重新读取</button></div>
     <p id="error" role="alert" hidden></p>
     <form id="settings" hidden>
       <div id="groups"></div>
-      <div class="actions"><button id="save" type="submit">保存配置</button><button id="refresh" type="button" class="secondary">重新读取</button></div>
       <p class="note">此页面使用已认证的 Dashboard 管理权限；聊天中的管理操作仍要求 AstrBot 机器人管理员，群主或频道管理员身份不会自动授权。</p>
     </form>
     <div id="management" hidden>
@@ -25,7 +39,8 @@
         <p>优先安装当前 Playwright 版本匹配的 Chromium。不会自动安装 Linux 系统软件包；权限不足或缺少共享库时请按下方指引处理。</p>
         <div class="actions">
           <button id="browser-probe" type="button">检测当前浏览器</button>
-          <button id="browser-install" type="button" class="secondary">安装匹配 Chromium</button>
+          <button id="browser-install" type="button" class="secondary" disabled>安装匹配 Chromium</button>
+          <button id="browser-refresh" type="button" class="secondary">刷新安装状态</button>
           <button id="browser-preview" type="button" class="secondary" disabled>下载中文自检图</button>
         </div>
         <p id="browser-result" role="status" aria-live="polite">尚未检测。</p>
@@ -42,13 +57,14 @@
         <p id="theme-info" class="note"></p>
         <p id="theme-result" role="status" aria-live="polite"></p>
         <p id="theme-error" role="alert" hidden></p>
+        <label for="theme-layout">列表预览排版<select id="theme-layout"></select></label>
         <div class="actions">
           <button id="theme-refresh" type="button" class="secondary">刷新主题</button>
           <button id="theme-preview-list" type="button">预览列表图</button>
           <button id="theme-preview-detail" type="button" class="secondary">预览详情图</button>
           <button id="theme-export" type="button" class="secondary">导出主题 ZIP</button>
         </div>
-        <figure id="theme-preview-box" hidden><figcaption id="theme-preview-caption"></figcaption><img id="theme-preview-image" alt="主题示例预览"></figure>
+        <figure id="theme-preview-box" tabindex="0" aria-label="主题预览，可滚动查看完整图片" hidden><figcaption id="theme-preview-caption"></figcaption><img id="theme-preview-image" alt="主题示例预览"></figure>
         <h3>独立配色</h3>
         <label for="theme-primary">主色<input id="theme-primary" type="color"></label>
         <label for="theme-mode">明暗<select id="theme-mode"><option value="light">浅色</option><option value="dark">深色</option></select></label>

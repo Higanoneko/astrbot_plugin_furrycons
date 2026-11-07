@@ -3,10 +3,10 @@
   "data_version": 1,
   "id": "liquidglass",
   "name": "Apple LiquidGlass",
-  "version": "1.0.0",
+  "version": "1.1.12",
   "author": "higan",
   "compatibility": {
-    "plugin_min": "0.1.0",
+    "plugin_min": "0.2.4",
     "plugin_max_exclusive": "1.0.0"
   },
   "templates": {
@@ -63,5 +63,10 @@
         "dark": "#5b3b9a"
       }
     }
-  }
+  },
+  "layouts": [
+    "compact",
+    "poster",
+    "grid"
+  ]
 }

@@ -19,7 +19,7 @@ from .errors import UserError
 from .theme_state import ThemePreferences
 
 BUILTINS = Path(__file__).resolve().parent.parent / "themes"
-PLUGIN_VERSION = (0, 1, 0)
+PLUGIN_VERSION = (0, 2, 12)
 IDENTIFIER = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 COLOR = re.compile(r"#[0-9a-fA-F]{6}\Z")
 ALLOWED_SUFFIXES = {
@@ -83,7 +83,7 @@ def _object(value, keys, label):
 
 def _manifest(value):
     _object(
-        value,
+        {k: v for k, v in value.items() if k != "layouts"} if isinstance(value, dict) else value,
         (
             "format_version",
             "data_version",
@@ -118,7 +118,14 @@ def _manifest(value):
         _version(compatibility["plugin_max_exclusive"]),
     )
     if not lower <= PLUGIN_VERSION < upper:
-        raise UserError("主题兼容区间不包含当前插件 0.1.0，未安装。")
+        raise UserError("主题兼容区间不包含当前插件 0.2.12，未安装。")
+    layouts = value.get("layouts", [])
+    if (
+        not isinstance(layouts, list)
+        or any(not isinstance(item, str) or item not in ("compact", "poster", "grid") for item in layouts)
+        or len(set(layouts)) != len(layouts)
+    ):
+        raise UserError("主题 layouts 须为 compact、poster、grid 的无重复列表。")
     _object(value["templates"], ("list", "detail"), "模板")
     for name in value["templates"].values():
         if package_path(name).suffix != ".html":
@@ -183,6 +190,7 @@ class Theme:
             "version": self.manifest["version"],
             "mode": mode,
             "origin": self.origin,
+            "layouts": self.manifest.get("layouts", []),
             "colors": {
                 "primary": self.overrides.get("primary", colors["primary"]),
                 **{
@@ -307,6 +315,8 @@ class _VisibleContent(HTMLParser):
             if name == "srcset":
                 raise UserError("主题资源须使用明确的 src 路径，不支持 srcset。")
             if value and (name == "src" or (tag == "link" and name == "href")):
+                validate_resource(self.theme, value, allow_media=tag == "img")
+            if value and name in ("href", "xlink:href") and tag in ("image", "feimage", "use"):
                 validate_resource(self.theme, value)
         if tag == "style":
             self.in_style = True
@@ -328,9 +338,13 @@ class _VisibleContent(HTMLParser):
             self.parts.append(data)
 
 
-def validate_resource(theme, value, relative=None):
+def validate_resource(theme, value, relative=None, *, allow_media=False):
     relative = PurePosixPath(".") if relative is None else PurePosixPath(relative)
     if value == "https://furrycons.invalid/font.otf":
+        return
+    if re.fullmatch(r"#[A-Za-z][A-Za-z0-9_-]{0,100}", value):
+        return
+    if allow_media and re.fullmatch(r"https://furrycons\.invalid/media/[0-9a-f]{64}\.png", value):
         return
     url = urlsplit(value)
     if url.scheme or url.netloc:
@@ -378,6 +392,7 @@ def contract_examples():
     }
     query = {
         "command_entry": "FEC",
+        "layout": "compact",
         "range": "示例查询范围",
         "code": "ABC123",
         "page": 1,
@@ -394,6 +409,8 @@ def contract_examples():
             },
         ],
     }
+    for item in [event, *query["events"]]:
+        item.update(poster=None, organizer_logo=None, organization_name="", poster_note="暂无展会海报")
     return {"detail": {"event": event}, "list": {"query": query}}
 
 

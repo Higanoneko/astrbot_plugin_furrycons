@@ -22,6 +22,24 @@ async def test_default_main_entry_and_independent_query_shortcut_share_query_beh
         await app.close()
 
 
+async def test_help_and_invalid_command_guide_users_with_the_configured_entry():
+    app = build(Settings.from_dict({
+        "api_key": "fixture", "command_entry": "兽展", "function_aliases": ["指南=帮助"],
+    }))
+    try:
+        for command in ("兽展", "兽展 帮助", "指南"):
+            text = (await app.dispatch(command)).text
+            assert "/兽展 查询" in text and "/兽展 选择 <短码> <序号>" in text
+            assert "/兽展 下一页 <短码>" in text and "--layout grid" in text
+            assert "/FEC" not in text
+        invalid = (await app.dispatch("兽展 不存在")).text
+        assert "无法识别" in invalid and "/兽展 帮助" in invalid
+        empty = (await app.dispatch("兽展 搜索 不存在")).text
+        assert "没有符合条件" in empty and "/兽展 搜索 <名称>" in empty
+    finally:
+        await app.close()
+
+
 async def test_custom_entry_preserves_function_aliases_permissions_and_command_hints():
     settings = Settings.from_dict(
         {

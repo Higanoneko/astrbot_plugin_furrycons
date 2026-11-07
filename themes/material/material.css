@@ -1,0 +1,1 @@
+.query-info,.event-card,.info-panel,.event-summary,.source-panel{background:var(--surface)}.query-info{border-left:5px solid var(--primary)}.event-card{box-shadow:0 3px 12px color-mix(in srgb,var(--text) 4%,transparent)}.introduction-panel{background:color-mix(in srgb,var(--surface) 96%,var(--primary))}.source-panel{background:color-mix(in srgb,var(--surface) 92%,var(--primary))}

@@ -49,11 +49,6 @@
     "type": "float",
     "default": 24
   },
-  "cache_minutes": {
-    "description": "新鲜查询缓存时限（分钟，0 禁用）",
-    "type": "float",
-    "default": 10
-  },
   "stale_hours": {
     "description": "数据源故障回退时限（小时，0 禁用）",
     "type": "float",
@@ -109,5 +104,16 @@
     "type": "int",
     "default": 120,
     "hint": "5–600 秒；下载持续接收数据时不会因为经过此时长而中止。"
+  },
+  "list_layout": {
+    "description": "默认列表排版",
+    "type": "string",
+    "default": "compact",
+    "options": [
+      "compact",
+      "poster",
+      "grid"
+    ],
+    "hint": "与分页或全部结果单图独立；聊天中可用 --layout compact|poster|grid 为单次查询选择。"
   }
 }

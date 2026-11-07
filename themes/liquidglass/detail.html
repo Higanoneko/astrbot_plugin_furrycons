@@ -1,9 +1,11 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><style>:root{--primary:{{ theme.colors.primary }};--background:{{ theme.colors.background }};--surface:{{ theme.colors.surface }};--text:{{ theme.colors.text }};--muted:{{ theme.colors.muted }};--tag:{{ theme.colors.tag }};--tag-text:{{ theme.colors.tag_text }};--note:{{ theme.colors.note }};--outline:{{ theme.colors.outline }};--glow:{{ theme.colors.glow }}}</style><link rel="stylesheet" href="{{ asset('glass.css') }}"></head><body>
-<div class="brand">FURRYCONS · 展会详情 / LIQUID GLASS</div>
-<h1>{{ event.name }}</h1><span class="tag">{{ event.status_label }}</span>
-<div class="card"><div class="label">举办时间 · {{ event.timezone }}</div>{{ event.start_label }} — {{ event.end_label }}<div class="label">地区与地址</div>{{ event.region }} · {{ event.address }}</div>
-<div class="card"><div class="label">{{ event.introduction_type }}</div><div class="intro">{{ event.introduction }}</div></div>
-<div class="card source"><div class="label">数据来源 · FurryCons</div>{{ event.source }}</div>
-<footer>展会 ID：{{ event.id }}<br>缺失信息以数据源为准，请通过来源入口核对最新安排。</footer>
+<html lang="zh-CN" data-mode="{{ theme.mode }}"><head><meta charset="utf-8">{% include '_head.html' %}<link rel="stylesheet" href="{{ asset('detail.css') }}"></head><body class="detail-page{% if event.poster %} has-poster-atmosphere{% endif %}">
+{% include '_defs.html' %}
+{% if event.poster %}<div class="detail-atmosphere" aria-hidden="true"><img class="atmosphere-base" src="{{ event.poster.url }}" alt=""><div class="atmosphere-refraction"><img src="{{ event.poster.url }}" alt=""></div><div class="atmosphere-flow"></div></div>{% endif %}
+<header class="page-heading"><div class="brand">FURRYCONS <span>展会详情</span></div><h1>{{ event.name }}</h1><span class="tag status-{{ event.status }}">{{ event.status_label }}</span></header>
+<section class="info-panel event-summary"><div class="summary-copy"><div class="section-eyebrow">相聚信息</div><div class="detail-fields"><div class="field-label">举办时间 · {{ event.timezone }}</div><div>{{ event.start_label }} <span class="separator">至</span> {{ event.end_label }}</div><div class="field-label">地区与地址</div><div>{{ event.region }} · {{ event.address }}</div></div>
+{% if event.organization_name %}<div class="organizer detail-organizer">{% if event.organizer_logo %}<img src="{{ event.organizer_logo.url }}" alt="" width="44" height="44">{% endif %}<div><div class="field-label">主办方</div>{{ event.organization_name }}</div></div>{% endif %}</div>{% include '_poster.html' %}</section>
+<section class="info-panel introduction-panel"><div class="section-eyebrow">关于这场相聚</div><div class="introduction-label">{{ event.introduction_type }}</div><div class="intro">{{ event.introduction }}</div></section>
+<section class="source-panel"><div class="field-label">数据来源 · FurryCons</div><div>{{ event.source }}</div></section>
+<footer><div>展会 ID：{{ event.id }}</div><div class="source-note">缺失信息以数据源为准，请通过来源入口核对最新安排。</div></footer>
 </body></html>

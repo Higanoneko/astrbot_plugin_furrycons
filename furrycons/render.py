@@ -1,7 +1,9 @@
 import asyncio
+import logging
 import mimetypes
 import re
 import struct
+from contextlib import suppress
 from importlib.metadata import version
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -10,10 +12,12 @@ from uuid import uuid4
 from playwright.async_api import Error, async_playwright
 
 from .errors import RenderError, UserError
+from .images import ImageCache
 from .preview import preview_data
 from .themes import ThemeStore
 
 ROOT = Path(__file__).resolve().parent.parent
+logger = logging.getLogger(__name__)
 
 
 class BrowserRenderer:
@@ -21,6 +25,7 @@ class BrowserRenderer:
         self.settings = settings
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.images = ImageCache(self.output_dir.parent / "image-cache")
         self._lock = asyncio.Semaphore(2)
         self._launch_lock = asyncio.Lock()
         self._engine = None
@@ -37,9 +42,9 @@ class BrowserRenderer:
     async def _launch_once(self):
         if self._browser and self._browser.is_connected():
             return self._browser
-        if self._engine is None:
-            self._engine = await async_playwright().start()
         try:
+            if self._engine is None:
+                self._engine = await async_playwright().start()
             self._browser = await self._engine.chromium.launch(
                 executable_path=self.settings.browser_path or None,
                 headless=True,
@@ -67,15 +72,33 @@ class BrowserRenderer:
                 f"或配置兼容的浏览器路径后重载。使用 /{self.settings.command_entry} 状态 检查。"
             ) from None
 
-    async def close(self):
-        if self._browser:
-            await self._browser.close()
+    async def _discard_browser(self, browser):
+        async with self._launch_lock:
+            if self._browser is not browser:
+                return
             self._browser = None
-        if self._engine:
-            await self._engine.stop()
-            self._engine = None
-        if self._owns_themes:
-            self.themes.close()
+            try:
+                await browser.close()
+            except (Error, OSError):
+                logger.warning("浏览器资源释放失败，下次渲染将创建新实例。")
+
+    async def close(self):
+        try:
+            await self.images.close()
+        finally:
+            try:
+                if self._browser:
+                    await self._discard_browser(self._browser)
+            finally:
+                engine, self._engine = self._engine, None
+                try:
+                    if engine:
+                        await engine.stop()
+                except (Error, OSError):
+                    logger.warning("浏览器运行时释放失败，请检查宿主进程资源。")
+                finally:
+                    if self._owns_themes:
+                        self.themes.close()
 
     async def status(self):
         result = await self.probe()
@@ -121,6 +144,9 @@ class BrowserRenderer:
 
     async def _render(self, template, view):
         theme = self.themes.get(next(iter(view.values())).get("theme_key", "builtin:material"))
+        view, media = await self.images.prepare(view, timeout=min(20, self.settings.render_timeout / 2))
+        if template == "list":
+            view["query"].setdefault("layout", "compact")
         html = theme.render(template, view)
         html = re.sub(
             r"(<head\b[^>]*>)",
@@ -133,14 +159,16 @@ class BrowserRenderer:
         if not font.is_file():
             raise RenderError("插件缺少捆绑中文字体，请重新安装完整插件资源。")
         async with self._lock:
-            browser = await self._launch()
-            context = await browser.new_context(
-                viewport={"width": 1080, "height": 800},
-                device_scale_factor=1,
-                java_script_enabled=False,
-                service_workers="block",
-            )
+            browser = context = output = None
+            succeeded = False
             try:
+                browser = await self._launch()
+                context = await browser.new_context(
+                    viewport={"width": 1080, "height": 800},
+                    device_scale_factor=1,
+                    java_script_enabled=False,
+                    service_workers="block",
+                )
                 page = await context.new_page()
 
                 # Templates cannot load network or arbitrary local resources.
@@ -149,6 +177,8 @@ class BrowserRenderer:
                 async def route(request):
                     if request.request.url == "https://furrycons.invalid/font.otf":
                         await request.fulfill(path=str(font), content_type="font/otf")
+                    elif request.request.url in media and request.request.resource_type == "image":
+                        await request.fulfill(body=media[request.request.url], content_type="image/png")
                     else:
                         url = urlsplit(request.request.url)
                         try:
@@ -185,6 +215,11 @@ class BrowserRenderer:
                     "Array.from(document.fonts).some(f => f.family === 'FurryCons' && f.status === 'loaded')"
                 ):
                     raise RenderError("捆绑中文字体加载失败，请检查插件资源。")
+                if await page.evaluate("document.documentElement.scrollHeight > 8192"):
+                    # Chromium can omit text when compositing backdrop filters
+                    # into a very tall full-page bitmap. Themes can retain their
+                    # surfaces/edges while disabling only that compositing path.
+                    await page.evaluate("document.documentElement.classList.add('long-image')")
                 output = self.output_dir / f"{uuid4().hex}.png"
                 expected = await page.evaluate(
                     "({width: window.innerWidth, height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight)})"
@@ -201,10 +236,35 @@ class BrowserRenderer:
                     raise RenderError(
                         "浏览器输出尺寸不完整，未发送截断或缩放图片。请检查运行资源后重试。"
                     )
+                succeeded = True
                 return output
-            except (Error, OSError, struct.error):
+            except (Error, OSError, struct.error) as error:
+                if (
+                    isinstance(error, Error) and browser is not None
+                    and (context is None or not browser.is_connected())
+                ):
+                    await self._discard_browser(browser)
                 raise RenderError(
                     "图片渲染失败，请检查浏览器资源、运行内存及渲染超时配置后重试。"
                 ) from None
             finally:
-                await context.close()
+                cleanup_failed = False
+                if context is not None:
+                    try:
+                        await context.close()
+                    except asyncio.CancelledError:
+                        if output is not None:
+                            with suppress(OSError):
+                                output.unlink(missing_ok=True)
+                        await self._discard_browser(browser)
+                        raise
+                    except (Error, OSError):
+                        cleanup_failed = True
+                        await self._discard_browser(browser)
+                if output is not None and (not succeeded or cleanup_failed):
+                    with suppress(OSError):
+                        output.unlink(missing_ok=True)
+                if cleanup_failed and succeeded:
+                    raise RenderError(
+                        "浏览器资源释放失败，未提交本次图片，请稍后重试；持续失败请联系机器人管理者检查运行资源。"
+                    ) from None

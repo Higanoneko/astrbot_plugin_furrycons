@@ -1,14 +1,16 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><style>
-@font-face {font-family:FurryCons;src:url('https://furrycons.invalid/font.otf')}
-* {box-sizing:border-box} body {margin:0;padding:40px;background:{{ theme.colors.background }};color:{{ theme.colors.text }};font-family:FurryCons,sans-serif;font-size:23px;line-height:1.6;overflow-wrap:anywhere}
-.brand {color:{{ theme.colors.primary }};font-size:20px;letter-spacing:2px} h1 {font-size:43px;margin:16px 0} .meta {font-size:20px;color:{{ theme.colors.muted }}} .card {margin-top:18px;padding:22px 28px;background:{{ theme.colors.surface }};border-radius:24px} h2 {font-size:29px;margin:0 0 8px}.tag {display:inline-block;background:{{ theme.colors.tag }};color:{{ theme.colors.tag_text }};border-radius:24px;padding:3px 14px;font-size:18px}.note{color:{{ theme.colors.note }}}.id{color:{{ theme.colors.muted }};font-size:16px}footer {margin-top:26px;font-size:19px;color:{{ theme.colors.muted }}}
-</style></head><body>
-<div class="brand">FURRYCONS · 展会日历</div><h1>展会查询</h1>
-<div class="meta">{{ query.range }}<br>查询短码 {{ query.code }} · 第 {{ query.page }}/{{ query.pages }} 页 · 共 {{ query.total }} 场</div>
-{% for event in query.events %}<article class="card"><h2>{{ event.number }}. {{ event.name }}</h2>
-<span class="tag">{{ event.status_label }}</span>
-{% if event.schedule_note %}<div class="note">{{ event.schedule_note }}</div>{% else %}<div>{{ event.start_label }} — {{ event.end_label }}</div>{% endif %}
-<div>{{ event.region }}</div><div class="id">ID：{{ event.id }}</div></article>{% endfor %}
-<footer>数据来源：FurryCons · https://www.furrycons.cn<br>日期待定记录独立标注，不使用延期前的旧日期。<br>翻页：/{{ query.command_entry }} 翻页 {{ query.code }} &lt;页码&gt;</footer>
+<html lang="zh-CN" data-mode="{{ theme.mode }}"><head><meta charset="utf-8">{% include '_head.html' %}</head><body>
+{% include '_defs.html' %}
+<header class="page-heading"><div class="brand">FURRYCONS <span>展会日历</span></div><h1>下一场相聚，从这里开始</h1><p class="subtitle">展会查询</p></header>
+<section class="query-info"><div class="query-range">{{ query.range }}</div><div class="query-stats"><span>共 <strong>{{ query.total }}</strong> 场展会</span><span>第 {{ query.page }} / {{ query.pages }} 页</span><span class="query-code">查询短码 <strong>{{ query.code }}</strong></span></div></section>
+<main class="event-list layout-{{ query.layout }}">
+{% for event in query.events %}<article class="event-card">
+{% if event.poster %}<div class="ambient-wash" aria-hidden="true"><img src="{{ event.poster.url }}" alt=""></div>{% endif %}
+<div class="card-info"><h2><span class="event-number">{{ event.number }}.</span> {{ event.name }}</h2><span class="tag status-{{ event.status }}">{{ event.status_label }}</span>
+<div class="event-fields"><div class="field"><span class="field-label">时间</span><div>{% if event.schedule_note %}<span class="note">{{ event.schedule_note }}</span>{% else %}<span class="date-label">{{ event.start_label }}</span> <span class="separator">至</span> <span class="date-label">{{ event.end_label }}</span>{% endif %}</div></div><div class="field"><span class="field-label">地点</span><div>{{ event.region }}{% if event.address != '地址未明确' %}<div class="venue">{{ event.address }}</div>{% endif %}</div></div></div>
+{% if event.organization_name %}<div class="organizer">{% if event.organizer_logo %}<img src="{{ event.organizer_logo.url }}" alt="" width="32" height="32">{% endif %}<span>{{ event.organization_name }}</span></div>{% endif %}
+<div class="event-id">ID：{{ event.id }}</div></div>
+{% include '_poster.html' %}</article>{% endfor %}
+</main>
+<footer><div class="footer-title">找到想去的展会？</div><div>查看详情：/{{ query.command_entry }} 选择 {{ query.code }} &lt;序号&gt;<br>翻页：/{{ query.command_entry }} 翻页 {{ query.code }} &lt;页码&gt;</div><div class="source-note">数据来源：FurryCons · https://www.furrycons.cn<br>日期待定记录单独标注，不使用延期前的旧日期。</div></footer>
 </body></html>

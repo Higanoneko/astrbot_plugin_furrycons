@@ -102,7 +102,7 @@ async def test_export_edit_and_import_layout_without_overwriting_original(tmp_pa
         manifest.update(id="layout-copy", name="布局副本", version="1.1.0")
         files["theme.json"] = json.dumps(manifest).encode()
         files["detail.html"] = files["detail.html"].replace(
-            b"<body>", "<body><p>本地排版副本</p>".encode()
+            b'<body class="detail-page">', '<body class="detail-page"><p>本地排版副本</p>'.encode()
         )
         edited = tmp_path / "edited.zip"
         with ZipFile(edited, "w", ZIP_DEFLATED) as archive:

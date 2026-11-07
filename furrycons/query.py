@@ -118,24 +118,43 @@ class Snapshot:
     created: float
     expires: float
     timezone: str = "Asia/Shanghai"
+    layout: str = "compact"
 
 
 class SnapshotStore:
     def __init__(self, path=":memory:"):
         self.command_entry = "FEC"
         self.connection = sqlite3.connect(path)
+        self.prune_pending = False
         self.connection.execute("""CREATE TABLE IF NOT EXISTS snapshots (
             code TEXT PRIMARY KEY, chat TEXT NOT NULL, user TEXT NOT NULL,
             payload TEXT NOT NULL, created REAL NOT NULL, expires REAL NOT NULL)""")
+        # Separate pending markers preserve the historical snapshots schema;
+        # existing records remain usable without inferring a new success state.
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS pending_snapshots (code TEXT PRIMARY KEY)"
+        )
+        self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS snapshots_expiry ON snapshots (expires, code)"
+        )
         self.connection.execute("""CREATE TABLE IF NOT EXISTS replies (
             chat TEXT NOT NULL, message TEXT NOT NULL, code TEXT NOT NULL, page INTEGER NOT NULL,
             PRIMARY KEY(chat, message))""")
         self.connection.execute("""CREATE TABLE IF NOT EXISTS page_views (
             chat TEXT NOT NULL, user TEXT NOT NULL, code TEXT NOT NULL, page INTEGER NOT NULL,
             PRIMARY KEY(chat, user, code))""")
+        for table in ("replies", "page_views"):
+            columns = {row[1] for row in self.connection.execute(f"PRAGMA table_info({table})")}
+            if "layout" not in columns:
+                self.connection.execute(
+                    f"ALTER TABLE {table} ADD COLUMN layout TEXT NOT NULL DEFAULT 'compact'"
+                )
         self.connection.commit()
 
-    def create(self, chat, user, events, label, page_size, now, lifetime, timezone="Asia/Shanghai"):
+    def create(
+        self, chat, user, events, label, page_size, now, lifetime,
+        timezone="Asia/Shanghai", layout="compact", *, ready=True,
+    ):
         created = now.timestamp()
         payload = json.dumps(
             {
@@ -143,6 +162,7 @@ class SnapshotStore:
                 "label": label,
                 "page_size": page_size,
                 "timezone": timezone,
+                "layout": layout,
             },
             ensure_ascii=False,
         )
@@ -154,6 +174,10 @@ class SnapshotStore:
                         "INSERT INTO snapshots VALUES (?, ?, ?, ?, ?, ?)",
                         (code, chat, user, payload, created, created + lifetime),
                     )
+                    if not ready:
+                        self.connection.execute(
+                            "INSERT INTO pending_snapshots VALUES (?)", (code,)
+                        )
                 return Snapshot(
                     code,
                     chat,
@@ -163,6 +187,7 @@ class SnapshotStore:
                     created,
                     created + lifetime,
                     timezone,
+                    layout,
                 )
             except sqlite3.IntegrityError:
                 continue
@@ -190,10 +215,28 @@ class SnapshotStore:
             created,
             expires,
             data.get("timezone", "Asia/Shanghai"),
+            data.get("layout", "compact"),
         )
 
     def close(self):
         self.connection.close()
+
+    def prune(self, now, *, grace=86400, limit=100):
+        cutoff = now.timestamp() - grace
+        codes = [row[0] for row in self.connection.execute(
+            "SELECT code FROM snapshots WHERE expires <= ? ORDER BY expires, code LIMIT ?",
+            (cutoff, limit + 1),
+        )]
+        more = len(codes) > limit
+        codes = codes[:limit]
+        with self.connection:
+            for code in codes:
+                self.connection.execute("DELETE FROM replies WHERE code = ?", (code,))
+                self.connection.execute("DELETE FROM page_views WHERE code = ?", (code,))
+                self.connection.execute("DELETE FROM pending_snapshots WHERE code = ?", (code,))
+                self.connection.execute("DELETE FROM snapshots WHERE code = ?", (code,))
+        self.prune_pending = more
+        return len(codes)
 
     def chats(self):
         return [
@@ -203,9 +246,16 @@ class SnapshotStore:
             )
         ]
 
+    def activate(self, code):
+        """Expose a newly generated query only after its output is registered."""
+        with self.connection:
+            self.connection.execute("DELETE FROM pending_snapshots WHERE code = ?", (code,))
+
     def latest(self, chat, user, now):
         row = self.connection.execute(
-            "SELECT code FROM snapshots WHERE chat = ? AND user = ? ORDER BY created DESC, rowid DESC LIMIT 1",
+            "SELECT code FROM snapshots WHERE chat = ? AND user = ? "
+            "AND code NOT IN (SELECT code FROM pending_snapshots) "
+            "ORDER BY created DESC, rowid DESC LIMIT 1",
             (chat, user),
         ).fetchone()
         if not row:
@@ -214,15 +264,16 @@ class SnapshotStore:
             )
         return self.get(row[0], chat, now)
 
-    def bind_message(self, chat, message, code, page):
+    def bind_message(self, chat, message, code, page, layout="compact"):
         existing = self.connection.execute(
-            "SELECT code, page FROM replies WHERE chat = ? AND message = ?", (chat, message)
+            "SELECT code, page, layout FROM replies WHERE chat = ? AND message = ?", (chat, message)
         ).fetchone()
         if existing:
-            return existing == (code, page)
+            return existing == (code, page, layout)
         with self.connection:
             self.connection.execute(
-                "INSERT INTO replies VALUES (?, ?, ?, ?)", (chat, message, code, page)
+                "INSERT INTO replies (chat, message, code, page, layout) VALUES (?, ?, ?, ?, ?)",
+                (chat, message, code, page, layout),
             )
         return True
 
@@ -242,8 +293,21 @@ class SnapshotStore:
         ).fetchone()
         return row[0] if row else 1
 
-    def remember_page(self, chat, user, code, page):
+    def current_layout(self, chat, user, code):
+        row = self.connection.execute(
+            "SELECT layout FROM page_views WHERE chat=? AND user=? AND code=?", (chat, user, code)
+        ).fetchone()
+        return row[0] if row else None
+
+    def message_layout(self, chat, message):
+        row = self.connection.execute(
+            "SELECT layout FROM replies WHERE chat=? AND message=?", (chat, message)
+        ).fetchone()
+        return row[0] if row else None
+
+    def remember_page(self, chat, user, code, page, layout="compact"):
         with self.connection:
             self.connection.execute(
-                "INSERT OR REPLACE INTO page_views VALUES (?, ?, ?, ?)", (chat, user, code, page)
+                "INSERT OR REPLACE INTO page_views (chat, user, code, page, layout) "
+                "VALUES (?, ?, ?, ?, ?)", (chat, user, code, page, layout),
             )

@@ -3,6 +3,7 @@
 from .errors import UserError
 
 ACTIONS = {
+    "帮助",
     "查询",
     "搜索",
     "详情",

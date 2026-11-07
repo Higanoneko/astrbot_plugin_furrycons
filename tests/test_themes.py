@@ -13,6 +13,7 @@ def theme_zip(tmp_path, identity="custom", *, manifest_changes=None, file_change
     manifest = json.loads(files["theme.json"])
     manifest["id"] = identity
     manifest["name"] = "自定义主题"
+    manifest["version"] = "1.0.0"
     manifest.update(manifest_changes or {})
     files["theme.json"] = json.dumps(manifest, ensure_ascii=False).encode()
     files.update(file_changes or {})

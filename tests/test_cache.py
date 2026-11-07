@@ -1,7 +1,10 @@
+import sqlite3
+import time
 from dataclasses import replace
 from datetime import datetime, timedelta
 
 import httpx
+import pytest
 from test_query import Renderer, row
 
 from furrycons.app import Application
@@ -11,7 +14,7 @@ from furrycons.query import SnapshotStore
 from furrycons.source import FurryConsSource
 
 
-async def test_fresh_boundary_stale_boundary_reopen_and_detail_never_falls_back(tmp_path):
+async def test_new_queries_refresh_and_stale_boundary_reopen_detail_never_falls_back(tmp_path):
     now = [datetime.fromisoformat("2026-10-18T00:00:00Z")]
     state = {"failure": False, "name": "原始名称"}
     settings = Settings.from_dict({"api_key": "test-key"})
@@ -50,15 +53,16 @@ async def test_fresh_boundary_stale_boundary_reopen_and_detail_never_falls_back(
         state["name"] = "新的名称"
         now[0] += timedelta(minutes=10, microseconds=-1)
         await app.execute("查询")
-        assert app.renderer.lists[-1]["events"][0]["name"] == "原始名称"
+        assert app.renderer.lists[-1]["events"][0]["name"] == "新的名称"
+        refreshed = now[0]
         assert "数据获取于" in app.renderer.lists[-1]["range"]
         now[0] += timedelta(microseconds=1)
         state["failure"] = True
         await app.execute("查询")
         assert "读取失败，使用旧缓存" in app.renderer.lists[-1]["range"]
-        assert "2026-10-18 08:00:00" in app.renderer.lists[-1]["range"]
+        assert "2026-10-18 08:09:59" in app.renderer.lists[-1]["range"]
         assert "暂不可用" in (await app.execute(f"选择 {original_code} 1")).text
-        now[0] = datetime.fromisoformat("2026-10-19T00:00:00Z")
+        now[0] = refreshed + timedelta(hours=24)
         await app.execute("查询")
         assert "使用旧缓存" in app.renderer.lists[-1]["range"]
         now[0] += timedelta(microseconds=1)
@@ -142,4 +146,98 @@ async def test_cached_empty_catalog_during_failure_is_explicitly_stale():
         result = await app.execute("查询")
         assert "没有符合条件" in result.text and "使用旧缓存" in result.text
     finally:
+        await app.close()
+
+
+async def test_list_endpoint_not_found_uses_stale_cache_but_detail_not_found_is_specific():
+    now = datetime.fromisoformat("2026-10-18T00:00:00Z")
+    state = {"list_missing": False}
+    settings = Settings.from_dict({"api_key": "key"})
+
+    def upstream(request):
+        if request.url.path.endswith("event/") and not state["list_missing"]:
+            return httpx.Response(
+                200, json={"current": 1, "pageSize": 100, "total": 1, "data": [row("x")]}
+            )
+        return httpx.Response(404)
+
+    app = Application(
+        settings, FurryConsSource(settings, httpx.MockTransport(upstream)), Renderer(),
+        clock=lambda: now,
+    )
+    try:
+        assert (await app.execute("查询")).image
+        state["list_missing"] = True
+        result = await app.execute("查询")
+        assert result.image and "使用旧缓存" in app.renderer.lists[-1]["range"]
+        assert "未找到该展会" in (await app.execute("详情 x")).text
+        app.settings = replace(settings, stale_hours=0)
+        assert "数据源暂不可用" in (await app.execute("查询")).text
+    finally:
+        await app.close()
+
+
+async def test_catalog_write_failure_does_not_hide_fresh_results(monkeypatch):
+    now = datetime.fromisoformat("2026-10-18T00:00:00Z")
+    settings = Settings.from_dict({"api_key": "key"})
+
+    def upstream(_request):
+        return httpx.Response(
+            200, json={"current": 1, "pageSize": 100, "total": 1, "data": [row("x")]}
+        )
+
+    cache = CatalogCache()
+
+    def fail_write(*_args):
+        raise sqlite3.OperationalError("disk full")
+
+    monkeypatch.setattr(cache, "_write", fail_write)
+    app = Application(
+        settings, FurryConsSource(settings, httpx.MockTransport(upstream)), Renderer(),
+        clock=lambda: now, cache=cache,
+    )
+    try:
+        result = await app.execute("查询")
+        assert result.image and app.renderer.lists[-1]["events"][0]["id"] == "x"
+        assert "使用旧缓存" not in app.renderer.lists[-1]["range"]
+    finally:
+        await app.close()
+
+
+@pytest.mark.parametrize("upstream_unavailable", [False, True])
+async def test_locked_optional_cache_does_not_block_fresh_query_or_hide_source_failure(
+    tmp_path, upstream_unavailable,
+):
+    calls = []
+
+    def upstream(request):
+        calls.append(request.url.path)
+        if upstream_unavailable:
+            return httpx.Response(503)
+        return httpx.Response(
+            200, json={"current": 1, "pageSize": 100, "total": 1, "data": [row("fresh")]},
+        )
+
+    settings = Settings.from_dict({"api_key": "offline-test"})
+    database = tmp_path / "cache.sqlite3"
+    cache = CatalogCache(database)
+    blocker = sqlite3.connect(database)
+    blocker.execute("BEGIN EXCLUSIVE")
+    app = Application(
+        settings, FurryConsSource(settings, httpx.MockTransport(upstream)), Renderer(),
+        clock=lambda: datetime.fromisoformat("2026-10-18T00:00:00Z"), cache=cache,
+    )
+    try:
+        started = time.monotonic()
+        reply = await app.execute("查询")
+        assert time.monotonic() - started < 1
+        assert len(calls) == 1
+        if upstream_unavailable:
+            assert reply.image is None and "数据源暂不可用" in reply.text
+        else:
+            assert reply.image and app.renderer.lists[-1]["events"][0]["id"] == "fresh"
+            assert "使用旧缓存" not in app.renderer.lists[-1]["range"]
+    finally:
+        blocker.rollback()
+        blocker.close()
         await app.close()

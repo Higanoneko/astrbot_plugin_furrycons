@@ -25,20 +25,20 @@ class FurryConsSource:
             raise UserError(
                 f"展会 ID 无效。请使用 /{self.settings.command_entry} 详情 <ID>，可从列表或来源链接获取 ID。"
             )
-        data = await self._get(f"event/{quote(event_id, safe='')}")
+        data = await self._get(f"event/{quote(event_id, safe='')}", detail=True)
         convention = Convention.from_api(data)
         if convention.id != event_id:
             raise SourceError("数据源返回的展会身份不匹配，未生成详情；请稍后重试。")
         return convention
 
-    async def _get(self, path, params=None):
+    async def _get(self, path, params=None, *, detail=False):
         if not self.settings.api_key:
             raise SourceError("尚未配置 FurryCons API Key，请机器人管理者在插件配置中填写。")
         try:
             response = await self.client.get(
                 f"{self.settings.api_base.rstrip('/')}/{path}", params=params
             )
-            if response.status_code == 404:
+            if response.status_code == 404 and detail:
                 raise UserError("未找到该展会，请核对 ID 或重新查询。")
             if response.status_code in (401, 403):
                 raise SourceError("数据源鉴权失败，请机器人管理者检查 API Key 与访问权限。")

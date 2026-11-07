@@ -1,4 +1,6 @@
+import logging
 import re
+import sqlite3
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from math import ceil
@@ -14,6 +16,8 @@ from .query import SnapshotStore, default_query, is_undated, name_query, query_o
 from .summary import introduction_summary
 from .themes import ThemeStore
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class Reply:
@@ -23,6 +27,8 @@ class Reply:
     page: int = 0
     file: Path | None = None
     output_code: str | None = None
+    layout: str = "compact"
+    new_query: bool = False
 
 
 class Application:
@@ -48,6 +54,9 @@ class Application:
         self.model = model
         self.outputs = outputs or OutputStore()
         self.themes = themes or ThemeStore()
+        self._last_maintenance = None
+        self._maintenance_pending = False
+        self._sending_paths = {}
         self.snapshots.command_entry = self.outputs.command_entry = self.themes.command_entry = (
             settings.command_entry
         )
@@ -70,6 +79,7 @@ class Application:
         is_admin=False,
         attachment=None,
     ):
+        self._maintain()
         try:
             reply = await self._execute(
                 command,
@@ -90,13 +100,36 @@ class Application:
                     + f"原文件：{self.entry} 原图 {code}",
                 )
             if reply.image and reply.query_code:
-                self.snapshots.remember_page(chat, user, reply.query_code, reply.page)
+                self.snapshots.remember_page(chat, user, reply.query_code, reply.page, reply.layout)
+                if reply.new_query:
+                    self.snapshots.activate(reply.query_code)
             return reply
         except UserError as exc:
             return Reply(text=str(exc))
 
+    def _maintain(self):
+        now = self.clock()
+        timestamp = now.timestamp()
+        if (not self._maintenance_pending and self._last_maintenance is not None
+                and 0 <= timestamp - self._last_maintenance < 3600):
+            return
+        self._last_maintenance = timestamp
+        pending = False
+        for store in (self.snapshots, self.outputs):
+            try:
+                if store is self.outputs:
+                    store.prune(now, protected=self._sending_paths)
+                else:
+                    store.prune(now)
+                pending = pending or store.prune_pending
+            except (OSError, sqlite3.Error):
+                logger.warning("过期记录维护失败，稍后重试。", exc_info=True)
+        self._maintenance_pending = pending
+
     async def _execute(self, command: str, *, chat, user, quote_id, is_admin, attachment):
         args = command.strip().split()
+        if not args or args == ["帮助"]:
+            return Reply(text=self._help())
         single = "--single" in args
         args = [arg for arg in args if arg != "--single"]
         try:
@@ -176,6 +209,18 @@ class Application:
                     f"用法：{self.entry} 主题默认 [全局|本会话] <主题标识|清除>；不带参数查看当前默认值。"
                 )
             explicit_theme = None
+            explicit_layout = None
+            quoted_layout = None
+            if "--layout" in args:
+                index = args.index("--layout")
+                if args.count("--layout") != 1 or index + 1 >= len(args):
+                    raise UserError("列表排版用法：--layout compact|poster|grid。")
+                explicit_layout = args[index + 1]
+                if explicit_layout not in ("compact", "poster", "grid"):
+                    raise UserError("列表排版须为 compact（紧凑图文）、poster（大图海报）或 grid（双列目录）。")
+                args = args[:index] + args[index + 2 :]
+                if not args or args[0] not in ("查询", "搜索", "翻页", "单图", "下一页", "上一页"):
+                    raise UserError("--layout 仅用于查询、搜索、翻页和全部结果单图。")
             if "--theme" in args:
                 index = args.index("--theme")
                 if args.count("--theme") != 1 or index + 1 >= len(args):
@@ -195,49 +240,68 @@ class Application:
                 or (len(args) == 2 and args[0] in ("选择", "翻页"))
             ):
                 snapshot, page = self.snapshots.referenced(chat, str(quote_id), self.clock())
+                quoted_layout = self.snapshots.message_layout(chat, str(quote_id))
                 if args[0] in ("下一页", "上一页"):
                     return await self._page(
-                        snapshot, page + (1 if args[0] == "下一页" else -1), theme_key=theme_key
+                        snapshot, page + (1 if args[0] == "下一页" else -1), theme_key=theme_key,
+                        user=user, layout=explicit_layout, quoted_layout=quoted_layout,
                     )
                 action, number = ("选择", args[0]) if len(args) == 1 else args
-                return await self.execute(
-                    f"{action} {snapshot.code} {number} --theme {theme_key}", chat=chat, user=user
-                )
+                args = [action, snapshot.code, number]
+            elif (
+                (len(args) == 1 and args[0] in ("下一页", "上一页"))
+                or (len(args) == 2 and args[0] in ("选择", "翻页"))
+            ):
+                snapshot = self.snapshots.latest(chat, user, self.clock())
+                args = [args[0], snapshot.code, *args[1:]]
             if args == ["状态"]:
                 return Reply(text=await self.renderer.status())
             if len(args) == 2 and args[0] in ("原图", "原文件"):
                 return Reply(file=self.outputs.get(args[1], chat, self.clock()))
             if args and args[0] == "查询":
                 query_options(args[1:], self.clock(), self.settings.timezone)
-                catalog, note = await self.cache.load(self.source, self.settings, self.clock)
+                catalog, note = await self.cache.load(
+                    self.source, self.settings, self.clock, refresh=True
+                )
                 events, label = default_query(
                     catalog, self.clock(), self.settings.timezone, args[1:]
                 )
                 return await self._query_reply(
-                    events, label + " · " + note, chat, user, single=single, theme_key=theme_key
+                    events, label + " · " + note, chat, user, single=single, theme_key=theme_key,
+                    layout=explicit_layout,
                 )
             if args and args[0] == "搜索":
                 if len(args) < 2:
                     raise UserError(f"请提供名称：{self.entry} 搜索 <展会名称>。")
-                catalog, note = await self.cache.load(self.source, self.settings, self.clock)
+                catalog, note = await self.cache.load(
+                    self.source, self.settings, self.clock, refresh=True
+                )
                 events, label = name_query(catalog, " ".join(args[1:]))
                 return await self._query_reply(
-                    events, label + " · " + note, chat, user, single=single, theme_key=theme_key
+                    events, label + " · " + note, chat, user, single=single, theme_key=theme_key,
+                    layout=explicit_layout,
                 )
             if len(args) == 2 and args[0] == "单图":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
-                return await self._page(snapshot, 1, all_results=True, theme_key=theme_key)
+                return await self._page(
+                    snapshot, 1, all_results=True, theme_key=theme_key, user=user,
+                    layout=explicit_layout,
+                )
             if len(args) == 2 and args[0] in ("下一页", "上一页"):
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
                 page = self.snapshots.current_page(chat, user, snapshot.code)
                 return await self._page(
-                    snapshot, page + (1 if args[0] == "下一页" else -1), theme_key=theme_key
+                    snapshot, page + (1 if args[0] == "下一页" else -1), theme_key=theme_key,
+                    user=user, layout=explicit_layout,
                 )
             if len(args) == 3 and args[0] == "翻页":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
                 if len(args[2]) > 9 or not args[2].isascii() or not args[2].isdigit():
                     raise UserError(f"页码须为正整数。用法：{self.entry} 翻页 <短码> <页码>。")
-                return await self._page(snapshot, int(args[2]), theme_key=theme_key)
+                return await self._page(
+                    snapshot, int(args[2]), theme_key=theme_key, user=user,
+                    layout=explicit_layout, quoted_layout=quoted_layout,
+                )
             if len(args) == 3 and args[0] == "选择":
                 snapshot = self.snapshots.get(args[1], chat, self.clock())
                 if len(args[2]) > 9 or not args[2].isascii() or not args[2].isdigit():
@@ -250,12 +314,40 @@ class Application:
                 return await self._detail(snapshot.events[index - 1].id, theme_key)
             if len(args) == 2 and args[0] == "详情":
                 return await self._detail(args[1], theme_key)
+            usages = {
+                "选择": "选择 <序号>，或 选择 <短码> <序号>",
+                "翻页": "翻页 <页码>，或 翻页 <短码> <页码>",
+                "下一页": "下一页 [短码]",
+                "上一页": "上一页 [短码]",
+                "详情": "详情 <展会ID>；也可先查询，再使用选择命令",
+                "单图": "单图 <查询短码>",
+                "原图": "原图 <输出码>；输出码见图片附带的原文件命令",
+                "原文件": "原文件 <输出码>；输出码见图片附带的原文件命令",
+            }
+            if args and args[0] in usages:
+                return Reply(text=f"用法：{self.entry} {usages[args[0]]}。")
             return Reply(
-                text=f"用法：{self.entry} 查询；{self.entry} 搜索 <名称>；{self.entry} 翻页 <短码> <页码>；"
-                f"{self.entry} 选择 <短码> <序号>；{self.entry} 详情 <ID>；{self.entry} 原图 <输出码>；{self.entry} 状态。"
+                text=f"无法识别命令或参数，请发送 {self.entry} 帮助 查看用法。"
             )
         except UserError as exc:
             return Reply(text=str(exc))
+
+    def _help(self):
+        entry = self.entry
+        return (
+            "FurryCons 展会查询\n"
+            f"① 查找：{entry} 查询，或 {entry} 搜索 <名称>\n"
+            f"② 看详情：{entry} 选择 <短码> <序号>\n"
+            f"③ 翻页：{entry} 下一页 <短码>，或 {entry} 翻页 <短码> <页码>\n"
+            f"本人最近查询可简写：{entry} 选择 1、{entry} 下一页、{entry} 上一页、{entry} 翻页 2\n"
+            "简写仅使用本人在本聊天最近成功生成的列表；操作旧列表或他人的列表请带短码，或引用原列表。\n"
+            f"筛选示例：{entry} 查询 广东 30天\n"
+            f"排版示例：{entry} 查询 --layout grid（也可选 compact、poster）\n"
+            f"查看主题：{entry} 主题列表；单次使用：{entry} 查询 --theme <主题标识>\n"
+            f"原文件：{entry} 原图 <输出码>；检查渲染环境：{entry} 状态\n"
+            f"进阶：{entry} 详情 <展会ID>；{entry} 单图 <查询短码>\n"
+            "短码和序号见列表图及其附带的文字；命令前缀以机器人配置为准。"
+        )
 
     async def _detail(self, identity, theme_key):
         convention = await self.source.detail(identity)
@@ -291,9 +383,23 @@ class Application:
             return await self.execute("搜索 " + text, chat=chat, user=user)
         return Reply()
 
-    async def _query_reply(self, events, label, chat, user, *, single=False, theme_key):
+    def _list_layout(self, theme_key, layout, *, explicit=False):
+        supported = self.themes.get(theme_key).manifest.get("layouts", [])
+        if explicit and layout not in supported:
+            raise UserError("所选主题不支持此排版，请选择支持该排版的主题或省略 --layout。")
+        return layout if layout in supported else supported[0] if supported else "compact"
+
+    async def _query_reply(
+        self, events, label, chat, user, *, single=False, theme_key, layout=None,
+    ):
+        selected_layout = self._list_layout(
+            theme_key, layout or self.settings.list_layout, explicit=layout is not None
+        )
         if not events:
-            return Reply(text=f"查询范围：{label}。没有符合条件的展会。数据来源：FurryCons。")
+            return Reply(
+                text=f"查询范围：{label}。没有符合条件的展会。数据来源：FurryCons。\n"
+                f"可尝试调整地区或日期，或使用 {self.entry} 搜索 <名称> 查找。"
+            )
         snapshot = self.snapshots.create(
             chat,
             user,
@@ -303,10 +409,25 @@ class Application:
             self.clock(),
             self.settings.interaction_hours * 3600,
             self.settings.timezone,
+            selected_layout,
+            ready=False,
         )
-        return await self._page(snapshot, 1, all_results=single, theme_key=theme_key)
+        reply = await self._page(
+            snapshot, 1, all_results=single, theme_key=theme_key, user=user,
+            quoted_layout=selected_layout,
+        )
+        return replace(reply, new_query=True)
 
-    async def _page(self, snapshot, page, *, all_results=False, theme_key="builtin:material"):
+    async def _page(
+        self, snapshot, page, *, all_results=False, theme_key="builtin:material",
+        user="local", layout=None, quoted_layout=None,
+    ):
+        selected_layout = self._list_layout(
+            theme_key,
+            layout or quoted_layout
+            or self.snapshots.current_layout(snapshot.chat, user, snapshot.code) or snapshot.layout,
+            explicit=layout is not None,
+        )
         page_size = len(snapshot.events) if all_results else snapshot.page_size
         pages = ceil(len(snapshot.events) / page_size)
         if not 1 <= page <= pages:
@@ -324,6 +445,7 @@ class Application:
         data = {
             "command_entry": self.settings.command_entry,
             "theme_key": theme_key,
+            "layout": selected_layout,
             "events": events,
             "range": ("全部结果单图 · " if all_results else "") + snapshot.label,
             "code": snapshot.code,
@@ -332,18 +454,30 @@ class Application:
             "total": len(snapshot.events),
         }
         path = await self.renderer.listing(data)
+        instructions = []
+        if not all_results and page > 1:
+            instructions.append(f"上一页：{self.entry} 上一页 {snapshot.code}")
+        if not all_results and page < pages:
+            instructions.append(f"下一页：{self.entry} 下一页 {snapshot.code}")
+        instructions.append(
+            f"看详情：{self.entry} 选择 {snapshot.code} {offset + 1}"
+            f"（示例；本页序号 {offset + 1}–{offset + len(events)}）"
+        )
         return Reply(
             text=f"查询短码 {snapshot.code} · 第 {page}/{pages} 页 · 共 {len(snapshot.events)} 场。\n"
-            f"翻页：{self.entry} 翻页 {snapshot.code} <页码>\n选择：{self.entry} 选择 {snapshot.code} <序号>",
+            + "\n".join(instructions),
             image=path,
             query_code=snapshot.code,
             page=page,
+            layout=selected_layout,
         )
 
     def record_delivery(self, reply, *, chat, message_id):
         if reply.query_code is None or message_id is None or not str(message_id).strip():
             return False
-        return self.snapshots.bind_message(chat, str(message_id), reply.query_code, reply.page)
+        return self.snapshots.bind_message(
+            chat, str(message_id), reply.query_code, reply.page, reply.layout
+        )
 
     async def manage_theme(self, action, *, chat="local", is_admin=False, **options):
         """The same permission and state decisions serve chat and WebUI callers."""
@@ -378,6 +512,10 @@ class Application:
             key = self.themes.get(options.get("key")).key
             data = preview_data(key, self.settings.command_entry)
             if options.get("kind") == "list":
+                data["query"]["layout"] = self._list_layout(
+                    key, options.get("layout") or self.settings.list_layout,
+                    explicit=options.get("layout") is not None,
+                )
                 return await self.renderer.listing(data["query"])
             if options.get("kind") == "detail":
                 return await self.renderer.detail(data["event"])
@@ -400,7 +538,16 @@ class Application:
             if isinstance(message_id, (str, int)) and not isinstance(message_id, bool):
                 self.record_delivery(reply, chat=chat, message_id=message_id)
 
-        return await deliver(reply, transport, record)
+        paths = {str(Path(path).resolve()) for path in (reply.image, reply.file) if path}
+        for path in paths:
+            self._sending_paths[path] = self._sending_paths.get(path, 0) + 1
+        try:
+            return await deliver(reply, transport, record)
+        finally:
+            for path in paths:
+                self._sending_paths[path] -= 1
+                if not self._sending_paths[path]:
+                    del self._sending_paths[path]
 
     async def close(self):
         try:

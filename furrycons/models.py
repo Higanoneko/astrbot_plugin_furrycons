@@ -3,6 +3,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .errors import SourceError
+from .images import image_reference
 from .regions import display_region
 
 
@@ -33,11 +34,16 @@ class Convention:
     address: str
     description: str
     source: str
+    thumbnail: str = ""
+    organization_name: str = ""
+    organization_logo_url: str = ""
 
     @classmethod
     def from_api(cls, data):
         if not isinstance(data, dict) or not text(data.get("id")):
             raise SourceError("数据源响应缺少展会身份，请稍后重试或联系机器人管理者。")
+        organization = data.get("organization")
+        organization = organization if isinstance(organization, dict) else {}
         return cls(
             id=text(data["id"]),
             name=text(data.get("name"), "名称未明确") or "名称未明确",
@@ -48,17 +54,23 @@ class Convention:
             address=text(data.get("address")) or "地址未明确",
             description=text(data.get("detail")),
             source=text(data.get("url")),
+            thumbnail=text(data.get("thumbnail")),
+            organization_name=text(organization.get("name")),
+            organization_logo_url=text(organization.get("logoUrl")),
         )
 
     def detail_view(self, timezone):
         result = asdict(self)
         result["timezone"] = timezone
         result["region"] = display_region(self.region)
+        result["poster"] = image_reference(self.thumbnail)
+        result["organizer_logo"] = image_reference(self.organization_logo_url)
         result["status_label"] = {
             "scheduled": "计划举办",
             "cancelled": "已取消",
             "postponed": "延期 · 日期待定",
             "rescheduled": "已改期",
+            "movedOnline": "已转线上",
         }.get(self.status, f"未知状态（{self.status or '未提供'}）")
         result["start_label"] = display_date(self.start, timezone)
         result["end_label"] = display_date(self.end, timezone)

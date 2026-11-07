@@ -17,8 +17,9 @@ class Settings:
     browser_download_timeout: int = 120
     render_timeout: int = 60
     page_size: int = 8
+    list_layout: str = "compact"
     interaction_hours: float = 24
-    cache_minutes: float = 10
+    cache_minutes: float = 0
     stale_hours: float = 24
     bare_numbers: bool = False
     bare_names: bool = False
@@ -97,6 +98,8 @@ class Settings:
             raise UserError("浏览器下载空闲超时须为 5–600 秒整数。")
         if type(settings.page_size) is not int or not 1 <= settings.page_size <= 100:
             raise UserError("每页数量须为 1–100 的整数。")
+        if settings.list_layout not in ("compact", "poster", "grid"):
+            raise UserError("列表排版须为 compact（紧凑图文）、poster（大图海报）或 grid（双列目录）。")
         if (
             type(settings.interaction_hours) not in (int, float)
             or not 0 < settings.interaction_hours <= 8760

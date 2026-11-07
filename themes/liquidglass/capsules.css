@@ -1,0 +1,16 @@
+/* Small tinted lenses sample the layers beneath them; large cards stay quiet. */
+.tag,.query-code{position:relative;isolation:isolate;border:1px solid color-mix(in srgb,var(--outline) 48%,transparent);background:color-mix(in srgb,currentColor 20%,transparent);backdrop-filter:blur(2px) saturate(125%);box-shadow:0 2px 5px color-mix(in srgb,var(--text) 5%,transparent),inset 0 1px 0 #ffffff38;font-weight:600}
+@supports(backdrop-filter:url('#fc-capsule-refraction')){.tag,.query-code{backdrop-filter:url('#fc-capsule-refraction') blur(2px) saturate(125%)}}
+.tag{padding:3px 12px;color:var(--tag-text)}
+.query-code{padding:4px 11px}
+.tag::before,.query-code::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(120deg,#ffffff18,transparent 45%,#ffffff04);pointer-events:none;z-index:-1}
+.status-postponed{color:var(--note)}
+.status-cancelled{color:var(--text);border-style:dashed}
+.tag:not(.status-scheduled):not(.status-postponed):not(.status-cancelled):not(.status-rescheduled):not(.status-movedOnline){color:var(--muted)}
+html[data-mode=dark] .tag,html[data-mode=dark] .query-code{border-color:color-mix(in srgb,var(--outline) 45%,transparent);box-shadow:0 2px 5px #0001,inset 0 1px 0 #ffffff18}
+html[data-mode=dark] .tag::before,html[data-mode=dark] .query-code::before{opacity:.5}
+/* Reuse the card's frosted surface without applying a second blur. */
+.event-card .tag,.query-info .query-code{backdrop-filter:none}
+.event-card .tag::before,.query-info .query-code::before{display:none}
+@supports(backdrop-filter:url('#fc-capsule-refraction')){.event-card .tag,.query-info .query-code{backdrop-filter:url('#fc-capsule-refraction')}}
+html.long-image .tag,html.long-image .query-code{backdrop-filter:none!important}

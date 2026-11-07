@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 import sqlite3
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -9,12 +10,16 @@ from zoneinfo import ZoneInfo
 from .errors import SourceError
 from .models import Convention
 
+logger = logging.getLogger(__name__)
+
 
 class CatalogCache:
     """Only complete catalogs are stored; all query filters run after this boundary."""
 
     def __init__(self, path=":memory:"):
-        self.connection = sqlite3.connect(path)
+        # This cache is optional: do not stall the host's event loop waiting for
+        # another process to release a database lock.
+        self.connection = sqlite3.connect(path, timeout=0)
         self.connection.execute(
             "CREATE TABLE IF NOT EXISTS catalogs (source TEXT PRIMARY KEY, fetched REAL NOT NULL, payload TEXT NOT NULL)"
         )
@@ -39,22 +44,31 @@ class CatalogCache:
                 (key, fetched, json.dumps([asdict(e) for e in events], ensure_ascii=False)),
             )
 
-    async def load(self, source, settings, clock):
+    async def load(self, source, settings, clock, *, refresh=False):
         # Credential changes may change the visible dataset; retain only a digest.
         key = hashlib.sha256(
             (settings.api_base.rstrip("/") + "\0" + settings.api_key).encode()
         ).hexdigest()
         async with self._lock:
-            cached = self._read(key)
+            try:
+                cached = self._read(key)
+            except sqlite3.Error:
+                logger.warning("目录缓存读取失败，本次尝试实时获取展会资料。")
+                cached = None
             age = clock().timestamp() - cached[0] if cached else None
             stale = False
-            if cached and 0 <= age < settings.cache_minutes * 60:
+            if not refresh and cached and 0 <= age < settings.cache_minutes * 60:
                 fetched, events = cached
             else:
                 try:
                     events = await source.list_all()
                     fetched = clock().timestamp()
-                    self._write(key, fetched, events)
+                    try:
+                        self._write(key, fetched, events)
+                    except sqlite3.Error:
+                        # The catalog is optional: a failed cache write must not
+                        # discard fresh data already obtained for this query.
+                        pass
                 except SourceError:
                     age = clock().timestamp() - cached[0] if cached else None
                     if not (

@@ -1,3 +1,5 @@
+import asyncio
+import sqlite3
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -153,5 +155,41 @@ async def test_explicit_file_failure_and_unsupported_capability_are_visible(tmp_
         messages = await app.deliver(original, transport, chat="local")
         assert any(("附件发送失败" if files else "未声明原文件附件能力") in m for m in messages)
         assert "secret-" not in "".join(messages)
+    finally:
+        await app.close()
+@pytest.mark.parametrize("files", [True, False])
+async def test_sent_image_is_not_sent_again_when_reference_storage_fails(tmp_path, files):
+    app = file_app(tmp_path)
+    try:
+        reply = await app.execute("查询", chat="group")
+        app.snapshots.connection.set_authorizer(
+            lambda action, table, *_: sqlite3.SQLITE_DENY
+            if action == sqlite3.SQLITE_INSERT and table == "replies"
+            else sqlite3.SQLITE_OK
+        )
+        transport = Transport(files=files)
+        messages = await app.deliver(reply, transport, chat="group")
+        text = "\n".join(messages)
+        assert transport.images == [(reply.image, ORIGINAL)] and transport.files == []
+        assert "引用关联" in text and reply.query_code in text
+        assert "图片发送失败" not in text
+        assert f"选择 {reply.query_code}" in text and "翻页" in text
+    finally:
+        await app.close()
+
+
+async def test_cancelled_image_send_propagates_without_attachment_fallback(tmp_path):
+    app = file_app(tmp_path)
+    try:
+        reply = await app.execute("查询", chat="group")
+        transport = Transport()
+
+        async def cancelled(_path):
+            raise asyncio.CancelledError
+
+        transport.send_image = cancelled
+        with pytest.raises(asyncio.CancelledError):
+            await app.deliver(reply, transport, chat="group")
+        assert transport.files == [] and app._sending_paths == {}
     finally:
         await app.close()

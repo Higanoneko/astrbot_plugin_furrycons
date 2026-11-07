@@ -28,6 +28,7 @@ def preview_data(theme_key="builtin:material", command_entry="FEC"):
         "event": event,
         "query": {
             "command_entry": command_entry,
+            "layout": "compact",
             "theme_key": theme_key,
             "range": "主题预览 · 示例数据（非真实展会）",
             "code": "PREVIEW",

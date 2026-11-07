@@ -3,21 +3,60 @@
   "data_version": 1,
   "id": "material",
   "name": "Material Design You",
-  "version": "1.0.0",
+  "version": "1.1.5",
   "author": "higan",
-  "compatibility": {"plugin_min": "0.1.0", "plugin_max_exclusive": "1.0.0"},
-  "templates": {"list": "list.html", "detail": "detail.html"},
+  "compatibility": {
+    "plugin_min": "0.2.4",
+    "plugin_max_exclusive": "1.0.0"
+  },
+  "templates": {
+    "list": "list.html",
+    "detail": "detail.html"
+  },
   "colors": {
     "primary": "#405f91",
     "mode": "light",
     "advanced": {
-      "background": {"label": "背景", "light": "#f4f6fc", "dark": "#141923"},
-      "surface": {"label": "卡片", "light": "#ffffff", "dark": "#212938"},
-      "text": {"label": "正文", "light": "#1b2436", "dark": "#eef2fa"},
-      "muted": {"label": "次要文字", "light": "#576478", "dark": "#b4bfd2"},
-      "tag": {"label": "状态底色", "light": "#d7e4ff", "dark": "#31486b"},
-      "tag_text": {"label": "状态文字", "light": "#244777", "dark": "#d7e4ff"},
-      "note": {"label": "日期提示", "light": "#9c5200", "dark": "#ffd59a"}
+      "background": {
+        "label": "背景",
+        "light": "#f4f6fc",
+        "dark": "#141923"
+      },
+      "surface": {
+        "label": "卡片",
+        "light": "#ffffff",
+        "dark": "#212938"
+      },
+      "text": {
+        "label": "正文",
+        "light": "#1b2436",
+        "dark": "#eef2fa"
+      },
+      "muted": {
+        "label": "次要文字",
+        "light": "#576478",
+        "dark": "#b4bfd2"
+      },
+      "tag": {
+        "label": "状态底色",
+        "light": "#d7e4ff",
+        "dark": "#31486b"
+      },
+      "tag_text": {
+        "label": "状态文字",
+        "light": "#244777",
+        "dark": "#d7e4ff"
+      },
+      "note": {
+        "label": "日期提示",
+        "light": "#9c5200",
+        "dark": "#ffd59a"
+      }
     }
-  }
+  },
+  "layouts": [
+    "compact",
+    "poster",
+    "grid"
+  ]
 }
